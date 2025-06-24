@@ -1,0 +1,234 @@
+import numpy as np
+import pandas as pd
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import mean_squared_error, r2_score
+from typing import Dict, List, Tuple, Optional
+import warnings
+warnings.filterwarnings('ignore')
+
+class MarketPredictor:
+    def __init__(self, data_manager):
+        self.data_manager = data_manager
+        self.models = {}
+        self.scalers = {}
+        
+    async def generate_predictions(self, symbols: List[str], start_date: str, 
+                                 end_date: str, prediction_days: int = 30) -> Dict:
+        """Generate market predictions for given symbols"""
+        
+        try:
+            # Get price data
+            price_data = await self.data_manager.get_price_data(symbols, start_date, end_date)
+            
+            predictions = {}
+            for symbol in symbols:
+                # Prepare features
+                features_df = self._create_features(price_data[symbol])
+                
+                # Train model and make predictions
+                model_results = self._train_and_predict(features_df, prediction_days)
+                
+                predictions[symbol] = {
+                    'predicted_prices': model_results['predictions'].tolist(),
+                    'confidence_intervals': model_results['confidence_intervals'],
+                    'model_accuracy': model_results['accuracy'],
+                    'trend_direction': model_results['trend'],
+                    'volatility_forecast': model_results['volatility']
+                }
+            
+            # Market sentiment analysis
+            market_sentiment = self._analyze_market_sentiment(price_data)
+            
+            return {
+                'predictions': predictions,
+                'market_sentiment': market_sentiment,
+                'prediction_period': prediction_days,
+                'last_update': pd.Timestamp.now().isoformat()
+            }
+            
+        except Exception as e:
+            raise Exception(f"Prediction generation failed: {str(e)}")
+    
+    def _create_features(self, price_series: pd.Series) -> pd.DataFrame:
+        """Create technical indicators and features for prediction"""
+        
+        df = pd.DataFrame({'price': price_series})
+        
+        # Basic price features
+        df['returns'] = df['price'].pct_change()
+        df['log_returns'] = np.log(df['price'] / df['price'].shift(1))
+        
+        # Moving averages
+        df['sma_5'] = df['price'].rolling(5).mean()
+        df['sma_20'] = df['price'].rolling(20).mean()
+        df['sma_50'] = df['price'].rolling(50).mean()
+        df['ema_12'] = df['price'].ewm(span=12).mean()
+        df['ema_26'] = df['price'].ewm(span=26).mean()
+        
+        # Volatility features
+        df['volatility_5'] = df['returns'].rolling(5).std()
+        df['volatility_20'] = df['returns'].rolling(20).std()
+        
+        # Technical indicators
+        # RSI
+        df['rsi'] = self._calculate_rsi(df['price'])
+        
+        # MACD
+        df['macd'] = df['ema_12'] - df['ema_26']
+        df['macd_signal'] = df['macd'].ewm(span=9).mean()
+        df['macd_histogram'] = df['macd'] - df['macd_signal']
+        
+        # Bollinger Bands
+        df['bb_middle'] = df['price'].rolling(20).mean()
+        bb_std = df['price'].rolling(20).std()
+        df['bb_upper'] = df['bb_middle'] + (bb_std * 2)
+        df['bb_lower'] = df['bb_middle'] - (bb_std * 2)
+        df['bb_position'] = (df['price'] - df['bb_lower']) / (df['bb_upper'] - df['bb_lower'])
+        
+        # Momentum features
+        df['momentum_5'] = df['price'] / df['price'].shift(5) - 1
+        df['momentum_20'] = df['price'] / df['price'].shift(20) - 1
+        
+        # Price position features
+        df['price_position_5'] = (df['price'] - df['price'].rolling(5).min()) / (df['price'].rolling(5).max() - df['price'].rolling(5).min())
+        df['price_position_20'] = (df['price'] - df['price'].rolling(20).min()) / (df['price'].rolling(20).max() - df['price'].rolling(20).min())
+        
+        # Lag features
+        for lag in [1, 2, 3, 5, 10]:
+            df[f'price_lag_{lag}'] = df['price'].shift(lag)
+            df[f'returns_lag_{lag}'] = df['returns'].shift(lag)
+        
+        return df.dropna()
+    
+    def _calculate_rsi(self, prices: pd.Series, window: int = 14) -> pd.Series:
+        """Calculate Relative Strength Index"""
+        delta = prices.diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs))
+        return rsi
+    
+    def _train_and_predict(self, features_df: pd.DataFrame, prediction_days: int) -> Dict:
+        """Train ML model and make predictions"""
+        
+        # Prepare target variable (next day price)
+        target = features_df['price'].shift(-1).dropna()
+        features = features_df[:-1].select_dtypes(include=[np.number])
+        
+        # Remove price from features to avoid data leakage
+        feature_cols = [col for col in features.columns if 'price' not in col.lower() or 'lag' in col.lower()]
+        X = features[feature_cols].fillna(0)
+        y = target
+        
+        # Split data
+        split_idx = int(len(X) * 0.8)
+        X_train, X_test = X[:split_idx], X[split_idx:]
+        y_train, y_test = y[:split_idx], y[split_idx:]
+        
+        # Scale features
+        scaler = StandardScaler()
+        X_train_scaled = scaler.fit_transform(X_train)
+        X_test_scaled = scaler.transform(X_test)
+        
+        # Train ensemble of models
+        models = {
+            'rf': RandomForestRegressor(n_estimators=100, random_state=42),
+            'lr': LinearRegression()
+        }
+        
+        predictions = {}
+        accuracies = {}
+        
+        for name, model in models.items():
+            model.fit(X_train_scaled, y_train)
+            pred = model.predict(X_test_scaled)
+            accuracy = r2_score(y_test, pred)
+            
+            predictions[name] = pred
+            accuracies[name] = accuracy
+        
+        # Ensemble prediction (average)
+        ensemble_pred = np.mean([predictions[name] for name in predictions], axis=0)
+        ensemble_accuracy = r2_score(y_test, ensemble_pred)
+        
+        # Generate future predictions
+        last_features = X.iloc[-1:].fillna(0)
+        last_features_scaled = scaler.transform(last_features)
+        
+        future_predictions = []
+        current_features = last_features_scaled.copy()
+        
+        for _ in range(prediction_days):
+            # Predict next price
+            next_price_preds = [model.predict(current_features)[0] for model in models.values()]
+            next_price = np.mean(next_price_preds)
+            future_predictions.append(next_price)
+            
+            # Update features for next prediction (simplified)
+            # In practice, you'd want to update all relevant features
+            current_features = current_features  # Simplified for now
+        
+        # Calculate confidence intervals (simplified)
+        price_std = features_df['price'].pct_change().std()
+        confidence_intervals = [
+            [pred * (1 - 1.96 * price_std), pred * (1 + 1.96 * price_std)]
+            for pred in future_predictions
+        ]
+        
+        # Trend analysis
+        recent_prices = features_df['price'].tail(20)
+        trend_slope = np.polyfit(range(len(recent_prices)), recent_prices, 1)[0]
+        trend_direction = 'bullish' if trend_slope > 0 else 'bearish'
+        
+        # Volatility forecast
+        recent_volatility = features_df['returns'].tail(30).std() * np.sqrt(252)
+        
+        return {
+            'predictions': np.array(future_predictions),
+            'confidence_intervals': confidence_intervals,
+            'accuracy': ensemble_accuracy,
+            'trend': trend_direction,
+            'volatility': recent_volatility
+        }
+    
+    def _analyze_market_sentiment(self, price_data: pd.DataFrame) -> Dict:
+        """Analyze overall market sentiment"""
+        
+        # Calculate market-wide metrics
+        returns = price_data.pct_change().dropna()
+        
+        # Overall market trend
+        avg_returns = returns.mean(axis=1)
+        recent_trend = avg_returns.tail(30).mean()
+        
+        # Market correlation
+        avg_correlation = returns.corr().values[np.triu_indices_from(returns.corr().values, k=1)].mean()
+        
+        # Volatility regime
+        market_vol = avg_returns.std() * np.sqrt(252)
+        vol_regime = 'high' if market_vol > 0.6 else 'medium' if market_vol > 0.3 else 'low'
+        
+        # Fear & Greed approximation based on volatility and returns
+        fear_greed_score = min(100, max(0, 50 + (recent_trend * 1000) - (market_vol * 50)))
+        
+        if fear_greed_score > 75:
+            sentiment = 'extreme_greed'
+        elif fear_greed_score > 55:
+            sentiment = 'greed'
+        elif fear_greed_score > 45:
+            sentiment = 'neutral'
+        elif fear_greed_score > 25:
+            sentiment = 'fear'
+        else:
+            sentiment = 'extreme_fear'
+        
+        return {
+            'sentiment': sentiment,
+            'fear_greed_score': fear_greed_score,
+            'market_trend': 'bullish' if recent_trend > 0 else 'bearish',
+            'volatility_regime': vol_regime,
+            'correlation_level': 'high' if avg_correlation > 0.7 else 'medium' if avg_correlation > 0.4 else 'low'
+        }
