@@ -1,37 +1,38 @@
-# 🚀 Crypto Portfolio Optimizer
+# Crypto Portfolio Optimizer
 
-A sophisticated web application for cryptocurrency portfolio optimization and backtesting, featuring real-time data fetching, advanced optimization algorithms, and professional Coinbase-inspired UI.
+A sophisticated web application for cryptocurrency portfolio optimization and backtesting, featuring real-time data fetching, advanced optimization algorithms, and professional UI design.
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://python.org)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.28+-red.svg)](https://streamlit.io)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-## ✨ Features
+## Features
 
-### 📊 **Portfolio Analysis & Optimization**
+### Portfolio Analysis & Optimization
 - **4 Optimization Methods**: Mean-Variance, Risk Parity, Black-Litterman, and Maximum Sharpe
+- **Custom Portfolio Analysis**: Manual weight input with real-time performance calculation
 - **Risk Management**: Conservative, Moderate, and Aggressive risk profiles
 - **Real-time Data**: Multi-source data fetching with fallback mechanisms (Yahoo Finance, CoinGecko, Binance)
-- **Professional Visualizations**: Enhanced correlation matrices with insights, beautiful pie charts with crypto-specific colors
+- **Professional Visualizations**: Enhanced correlation matrices with insights, crypto-specific color schemes
 
-### 🔍 **Market Insights**
+### Market Insights
 - **Enhanced Correlation Analysis**: Interactive heatmaps with diversification insights
 - **Risk vs Return Profiles**: Scatter plots showing asset positioning
 - **Rolling Performance Metrics**: 30-day rolling analysis with Sharpe ratios
 - **Statistical Summaries**: Comprehensive performance statistics
 
-### 📈 **Sample Backtesting**
+### Sample Backtesting
 - **Portfolio Performance Tracking**: Monitor your portfolio against benchmarks
 - **Benchmark Comparisons**: Compare against BTC-only and equal-weight strategies
 - **Performance Metrics**: Total return, volatility, Sharpe ratio, and maximum drawdown
 
-### 🎨 **Professional UI/UX**
-- **Coinbase-Inspired Design**: Clean, modern interface with professional styling
+### Professional UI/UX
+- **Clean Modern Design**: Professional interface with Coinbase-inspired styling
 - **Discrete Loading Indicators**: Non-intrusive data loading feedback
 - **Responsive Layout**: Optimized for desktop and mobile viewing
 - **Interactive Charts**: Plotly-powered visualizations with hover details
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 - Python 3.8 or higher
@@ -58,7 +59,7 @@ streamlit run app.py
 
 4. **Open your browser** and navigate to `http://localhost:8501`
 
-## 🔧 Usage Guide
+## Usage Guide
 
 ### Portfolio Optimization
 1. **Select Assets**: Choose from 15 major cryptocurrencies in the sidebar
@@ -67,18 +68,25 @@ streamlit run app.py
 4. **Optimize**: Click "Optimize Portfolio" to get optimal weights
 5. **Analyze Results**: View allocation charts, risk contributions, and metrics
 
+### Portfolio Analysis
+1. **Define Weights**: Input custom portfolio weights for each selected asset
+2. **View Performance**: See real-time calculation of portfolio metrics
+3. **Analyze Risk**: Review correlation matrices and diversification insights
+4. **Track Returns**: Monitor portfolio performance over selected time period
+
 ### Market Analysis
 1. **Navigate**: Select "Market Insights" mode
 2. **Explore Correlations**: View enhanced correlation matrix with insights
 3. **Risk Analysis**: Examine risk vs return scatter plots
 4. **Deep Dive**: Select specific assets for detailed rolling analysis
 
-### Portfolio Analysis
-1. **Set Weights**: Use "Portfolio Analysis" mode to input custom weights
-2. **View Metrics**: See comprehensive performance statistics
-3. **Correlation Check**: Review asset correlations for diversification
+### Sample Backtesting
+1. **Set Weights**: Define portfolio allocation using manual weight inputs
+2. **Compare Performance**: View results against BTC-only and equal-weight benchmarks
+3. **Analyze Metrics**: Review comprehensive performance statistics
+4. **Visualize Results**: Interactive charts showing portfolio evolution
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 Crypto_Portfolio/
@@ -93,7 +101,7 @@ Crypto_Portfolio/
 └── docs/                     # Additional documentation
 ```
 
-## 🛠 Technical Details
+## Technical Details
 
 ### Data Sources & Reliability
 - **Primary**: Yahoo Finance (yfinance) - Most reliable for historical data
@@ -103,22 +111,22 @@ Crypto_Portfolio/
 
 ### Optimization Algorithms
 
-#### 1. **Mean-Variance Optimization**
+#### 1. Mean-Variance Optimization
 - Maximizes expected return for given risk level
 - Uses CVXPY for convex optimization
 - Constraints: long-only positions, maximum asset weights
 
-#### 2. **Risk Parity**
+#### 2. Risk Parity
 - Equal risk contribution from all assets
 - Minimizes portfolio concentration risk
 - Ideal for diversification-focused strategies
 
-#### 3. **Black-Litterman**
+#### 3. Black-Litterman
 - Bayesian approach with market equilibrium baseline
 - Incorporates investor views and confidence levels
 - More stable than pure mean-variance optimization
 
-#### 4. **Maximum Sharpe Ratio**
+#### 4. Maximum Sharpe Ratio
 - Optimizes risk-adjusted returns
 - Maximizes excess return per unit of risk
 - Popular for risk-conscious investors
@@ -128,7 +136,7 @@ Crypto_Portfolio/
 - **Pie Charts**: Crypto-specific color palette (Bitcoin Orange, Ethereum Blue, etc.)
 - **Interactive Elements**: Hover details, zoom functionality, responsive design
 
-## 🎯 Risk Profiles
+## Risk Profiles
 
 | Profile | Target Return | Max Volatility | Max Asset Weight |
 |---------|---------------|----------------|------------------|
@@ -136,7 +144,7 @@ Crypto_Portfolio/
 | **Moderate** | 15% | 25% | 40% |
 | **Aggressive** | 25% | 40% | 60% |
 
-## 📊 Supported Cryptocurrencies
+## Supported Cryptocurrencies
 
 - **Bitcoin (BTC)** - Digital gold standard
 - **Ethereum (ETH)** - Smart contract platform
@@ -154,17 +162,17 @@ Crypto_Portfolio/
 - **Cosmos (ATOM)** - Internet of blockchains
 - **Algorand (ALGO)** - Pure proof-of-stake
 
-## ⚠️ Important Disclaimers
+## Important Disclaimers
 
 **This application is for educational and research purposes only.**
 
-- 📊 **Not Financial Advice**: All results are based on historical data and simulations
-- 💹 **Market Risk**: Cryptocurrency markets are highly volatile and unpredictable
-- 🔮 **Model Limitations**: Past performance does not guarantee future results
-- 💸 **Trading Risks**: Real trading involves additional costs, slippage, and market impact
-- 🏛️ **Regulatory Risk**: Cryptocurrency regulations may vary by jurisdiction
+- **Not Financial Advice**: All results are based on historical data and simulations
+- **Market Risk**: Cryptocurrency markets are highly volatile and unpredictable
+- **Model Limitations**: Past performance does not guarantee future results
+- **Trading Risks**: Real trading involves additional costs, slippage, and market impact
+- **Regulatory Risk**: Cryptocurrency regulations may vary by jurisdiction
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
@@ -174,19 +182,19 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
-## 📝 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🆘 Support
+## Support
 
 For questions and support:
-- 📧 Create an issue on GitHub
-- 📖 Check the documentation in `/docs`
-- 💬 Review existing issues for solutions
+- Create an issue on GitHub
+- Check the documentation in `/docs`
+- Review existing issues for solutions
 
 ---
 
-**Made with ❤️ for the crypto community**
+**Made for the crypto community**
 
 *Always conduct your own research and consider consulting with financial professionals before making investment decisions.*

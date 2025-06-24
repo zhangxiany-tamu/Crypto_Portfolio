@@ -720,7 +720,7 @@ def get_cached_data(symbols, start_date, end_date):
     <div style='position: fixed; top: 70px; right: 20px; background: white; padding: 8px 12px; 
                 border-radius: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 999;
                 border: 1px solid #e6e8ea;'>
-        <span style='font-size: 12px; color: #5b616e;'>📊 Loading data...</span>
+        <span style='font-size: 12px; color: #5b616e;'>Loading data...</span>
     </div>
     """, unsafe_allow_html=True)
     
@@ -745,7 +745,7 @@ def get_cached_data(symbols, start_date, end_date):
         <div style='position: fixed; top: 70px; right: 20px; background: #f0f9ff; padding: 8px 12px; 
                     border-radius: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 999;
                     border: 1px solid #00d395;'>
-            <span style='font-size: 12px; color: #00d395;'>✅ Data loaded</span>
+            <span style='font-size: 12px; color: #00d395;'>Data loaded</span>
         </div>
         """, unsafe_allow_html=True)
         
@@ -1381,7 +1381,7 @@ elif mode == "Market Insights":
     st.plotly_chart(fig_scatter, use_container_width=True, hide_index=True)
     
     # Enhanced Correlation Analysis
-    st.subheader("📊 Asset Correlation Matrix")
+    st.subheader("Asset Correlation Matrix")
     
     col1, col2 = st.columns([2, 1])
     
@@ -1418,7 +1418,7 @@ elif mode == "Market Insights":
         st.plotly_chart(fig_corr, use_container_width=True)
     
     with col2:
-        st.markdown("**📈 Correlation Insights**")
+        st.markdown("**Correlation Insights**")
         
         # Find highest and lowest correlations
         corr_values = corr_matrix.values
@@ -1434,28 +1434,28 @@ elif mode == "Market Insights":
         lowest_corr = corr_values[min_i, min_j]
         
         st.metric(
-            "🔗 Highest Correlation",
+            "Highest Correlation",
             f"{corr_matrix.index[max_i]} - {corr_matrix.columns[max_j]}",
             f"{highest_corr:.2f}"
         )
         
         st.metric(
-            "🔀 Lowest Correlation", 
+            "Lowest Correlation", 
             f"{corr_matrix.index[min_i]} - {corr_matrix.columns[min_j]}",
             f"{lowest_corr:.2f}"
         )
         
         # Average correlation
         avg_corr = np.nanmean(corr_values)
-        st.metric("📊 Average Correlation", f"{avg_corr:.2f}")
+        st.metric("Average Correlation", f"{avg_corr:.2f}")
         
         # Diversification insight
         if avg_corr > 0.7:
-            st.warning("⚠️ High correlation - Limited diversification")
+            st.warning("High correlation - Limited diversification")
         elif avg_corr > 0.3:
-            st.info("ℹ️ Moderate correlation - Some diversification benefit")
+            st.info("Moderate correlation - Some diversification benefit")
         else:
-            st.success("✅ Low correlation - Good diversification potential")
+            st.success("Low correlation - Good diversification potential")
     
     # Rolling metrics
     st.subheader("Rolling Performance Metrics")
@@ -1544,24 +1544,92 @@ else:  # Portfolio Analysis
         end_date.strftime('%Y-%m-%d')
     )
     
-    # Display key metrics
+    # Manual portfolio weight input
+    st.subheader("Define Your Portfolio Weights")
+    
+    # Create columns for weight input
+    n_cols = min(len(selected_symbols), 3)  # Max 3 columns for better layout
+    cols = st.columns(n_cols)
+    
+    portfolio_weights = {}
+    total_weight = 0
+    
+    for i, symbol in enumerate(selected_symbols):
+        col_idx = i % n_cols
+        with cols[col_idx]:
+            weight = st.number_input(
+                f"{symbol.replace('-USD', '')} Weight", 
+                min_value=0.0, 
+                max_value=1.0, 
+                value=1.0/len(selected_symbols),  # Default equal weight
+                step=0.05,
+                key=f"portfolio_weight_{symbol}"
+            )
+            portfolio_weights[symbol] = weight
+            total_weight += weight
+    
+    # Normalize weights to sum to 100%
+    normalized_weights = {}
+    if total_weight > 0:
+        for symbol in selected_symbols:
+            normalized_weights[symbol] = portfolio_weights[symbol] / total_weight
+    else:
+        # Fallback to equal weights
+        for symbol in selected_symbols:
+            normalized_weights[symbol] = 1.0 / len(selected_symbols)
+    
+    # Display weight summary
+    col1, col2 = st.columns(2)
+    with col1:
+        st.write(f"**Total Weight:** {total_weight:.1%}")
+    with col2:
+        if abs(total_weight - 1.0) > 0.01:
+            st.info(f"Weights normalized to 100% (scaling factor: {1/total_weight:.2f})")
+        else:
+            st.success("Weights sum to 100%")
+    
+    # Calculate portfolio metrics based on user weights
+    portfolio_returns = []
+    portfolio_values = [10000]  # Start with $10,000
+    
+    for i in range(1, len(price_data)):
+        daily_returns = {}
+        for symbol in selected_symbols:
+            daily_returns[symbol] = price_data[symbol].iloc[i] / price_data[symbol].iloc[i-1] - 1
+        
+        # Calculate weighted portfolio return
+        portfolio_return = sum(normalized_weights[symbol] * daily_returns[symbol] for symbol in selected_symbols)
+        portfolio_returns.append(portfolio_return)
+        portfolio_values.append(portfolio_values[-1] * (1 + portfolio_return))
+    
+    # Calculate portfolio metrics
+    portfolio_returns = np.array(portfolio_returns)
+    portfolio_total_return = (portfolio_values[-1] / portfolio_values[0]) - 1
+    portfolio_volatility = np.std(portfolio_returns) * np.sqrt(252)
+    portfolio_annualized_return = (portfolio_values[-1] / portfolio_values[0]) ** (252 / len(portfolio_returns)) - 1
+    portfolio_sharpe = (portfolio_annualized_return - 0.02) / portfolio_volatility if portfolio_volatility > 0 else 0
+    
+    # Maximum drawdown calculation
+    portfolio_values_series = pd.Series(portfolio_values)
+    running_max = portfolio_values_series.expanding().max()
+    drawdown = (portfolio_values_series - running_max) / running_max
+    max_drawdown = drawdown.min()
+    
+    # Display portfolio metrics
+    st.subheader("Your Portfolio Performance")
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        avg_return = returns.mean().mean() * 252
-        st.metric("Avg Portfolio Return", f"{avg_return:.1%}")
+        st.metric("Total Return", f"{portfolio_total_return:.1%}")
     
     with col2:
-        avg_vol = returns.std().mean() * np.sqrt(252)
-        st.metric("Avg Volatility", f"{avg_vol:.1%}")
+        st.metric("Annualized Volatility", f"{portfolio_volatility:.1%}")
     
     with col3:
-        sharpe = (avg_return - 0.02) / avg_vol if avg_vol > 0 else 0
-        st.metric("Avg Sharpe Ratio", f"{sharpe:.2f}")
+        st.metric("Sharpe Ratio", f"{portfolio_sharpe:.2f}")
     
     with col4:
-        total_days = len(price_data)
-        st.metric("Analysis Period", f"{total_days} days")
+        st.metric("Max Drawdown", f"{max_drawdown:.1%}")
     
     # Price charts
     st.subheader("Price Performance")
