@@ -16,6 +16,12 @@ from datetime import datetime, timedelta
 from yahooquery import Ticker
 import sys
 import os
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+import warnings
+warnings.filterwarnings('ignore')
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -60,6 +66,7 @@ def apply_theme_css(theme):
         background: var(--cb-secondary-bg);
         color: var(--cb-text-primary);
         font-feature-settings: 'tnum';
+        font-size: 16px;
     }
     
     /* Hide Streamlit branding */
@@ -639,6 +646,80 @@ def apply_theme_css(theme):
         text-transform: uppercase;
         letter-spacing: 0.5px;
     }
+    
+    /* Enhanced Font Sizes for Better Readability */
+    
+    /* Main content text */
+    .stMarkdown, .stText, p {
+        font-size: 16px !important;
+        line-height: 1.5 !important;
+    }
+    
+    /* Sidebar labels and text */
+    .css-1d391kg label, .stSidebar label {
+        font-size: 15px !important;
+    }
+    
+    .css-1d391kg p, .stSidebar p {
+        font-size: 14px !important;
+    }
+    
+    /* Button text */
+    .stButton > button {
+        font-size: 16px !important;
+        padding: 0.75rem 1.5rem !important;
+    }
+    
+    /* Input field text */
+    .stNumberInput input, .stTextInput input, .stSelectbox select {
+        font-size: 15px !important;
+    }
+    
+    /* Metric values and labels */
+    .stMetric [data-testid="metric-value"] {
+        font-size: 1.75rem !important;
+    }
+    
+    .stMetric [data-testid="metric-label"] {
+        font-size: 14px !important;
+    }
+    
+    /* Headers */
+    h1 {
+        font-size: 2.5rem !important;
+    }
+    
+    h2 {
+        font-size: 2rem !important;
+    }
+    
+    h3 {
+        font-size: 1.5rem !important;
+    }
+    
+    /* Subheaders */
+    .stSubheader {
+        font-size: 1.25rem !important;
+    }
+    
+    /* Table text */
+    .stDataFrame table {
+        font-size: 14px !important;
+    }
+    
+    .stDataFrame th {
+        font-size: 13px !important;
+    }
+    
+    /* Info, warning, success, error messages */
+    .stAlert {
+        font-size: 15px !important;
+    }
+    
+    /* Multiselect items */
+    .stMultiSelect span {
+        font-size: 14px !important;
+    }
 </style>
 """
 
@@ -674,7 +755,7 @@ st.sidebar.title("Portfolio Configuration")
 # Mode selection
 mode = st.sidebar.selectbox(
     "Select Mode",
-    ["Portfolio Analysis", "Portfolio Optimization", "Sample Backtest", "Market Insights"]
+    ["Portfolio Analysis", "Portfolio Optimization", "Sample Backtest", "Market Insights", "ML Predictions"]
 )
 
 # Common parameters
@@ -1043,45 +1124,104 @@ elif mode == "Sample Backtest":
     with col2:
         rebalance_freq = st.selectbox("Rebalancing", ["Monthly", "Quarterly", "Semi-Annual"])
     
-    # Enhanced portfolio simulation
+    # Generate rebalancing dates based on frequency
+    def get_rebalance_dates(date_index, frequency):
+        rebalance_dates = []
+        if frequency == "Monthly":
+            # First trading day of each month
+            for year in range(date_index[0].year, date_index[-1].year + 1):
+                for month in range(1, 13):
+                    month_start = pd.Timestamp(year, month, 1)
+                    month_dates = [d for d in date_index if d >= month_start and d.month == month and d.year == year]
+                    if month_dates:
+                        rebalance_dates.append(min(month_dates))
+        elif frequency == "Quarterly":
+            # First trading day of Jan, Apr, Jul, Oct
+            for year in range(date_index[0].year, date_index[-1].year + 1):
+                for month in [1, 4, 7, 10]:
+                    quarter_start = pd.Timestamp(year, month, 1)
+                    quarter_dates = [d for d in date_index if d >= quarter_start and d.month == month and d.year == year]
+                    if quarter_dates:
+                        rebalance_dates.append(min(quarter_dates))
+        elif frequency == "Semi-Annual":
+            # First trading day of Jan and Jul
+            for year in range(date_index[0].year, date_index[-1].year + 1):
+                for month in [1, 7]:
+                    semi_start = pd.Timestamp(year, month, 1)
+                    semi_dates = [d for d in date_index if d >= semi_start and d.month == month and d.year == year]
+                    if semi_dates:
+                        rebalance_dates.append(min(semi_dates))
+        return set(rebalance_dates)
+    
+    rebalance_dates = get_rebalance_dates(price_data.index, rebalance_freq)
+    trading_fee = 0.001  # 0.1% trading fee per transaction
+    
+    # Enhanced portfolio simulation with rebalancing
     portfolio_values = []
     btc_values = []
     eth_values = []
     equal_weight_values = []
+    portfolio_shares = {symbol: 0 for symbol in selected_symbols}  # Track actual shares
+    rebalance_costs = []
     
     # Equal weight benchmark
     equal_weights = {symbol: 1.0/len(selected_symbols) for symbol in selected_symbols}
     
     for i, date in enumerate(price_data.index):
         if i == 0:
+            # Initial investment
             portfolio_value = initial_capital
             btc_value = initial_capital
             eth_value = initial_capital
             equal_weight_value = initial_capital
-        else:
-            # Portfolio return
-            daily_returns = price_data.iloc[i] / price_data.iloc[i-1] - 1
             
-            # Custom portfolio
-            portfolio_return = sum(normalized_weights[symbol] * daily_returns[symbol] for symbol in selected_symbols)
-            portfolio_value = portfolio_values[-1] * (1 + portfolio_return)
+            # Initial allocation with trading costs
+            initial_cost = initial_capital * trading_fee
+            remaining_capital = initial_capital - initial_cost
+            for symbol in selected_symbols:
+                allocation = remaining_capital * normalized_weights[symbol]
+                portfolio_shares[symbol] = allocation / price_data[symbol].iloc[i]
+            
+            rebalance_costs.append(initial_cost)
+        else:
+            # Calculate current portfolio value from shares
+            current_portfolio_value = sum(portfolio_shares[symbol] * price_data[symbol].iloc[i] for symbol in selected_symbols)
+            
+            # Check if rebalancing is needed
+            if date in rebalance_dates:
+                # Rebalancing: sell all positions and buy according to target weights
+                turnover = 0.5  # Assume 50% turnover
+                rebalance_cost = current_portfolio_value * turnover * trading_fee
+                net_value = current_portfolio_value - rebalance_cost
+                
+                # Reallocate shares based on target weights
+                for symbol in selected_symbols:
+                    allocation = net_value * normalized_weights[symbol]
+                    portfolio_shares[symbol] = allocation / price_data[symbol].iloc[i]
+                
+                portfolio_value = net_value
+                rebalance_costs.append(rebalance_cost)
+            else:
+                # No rebalancing - value changes with market
+                portfolio_value = current_portfolio_value
+                rebalance_costs.append(0)
             
             # BTC benchmark
             if 'BTC-USD' in price_data.columns:
-                btc_return = daily_returns['BTC-USD']
+                btc_return = price_data['BTC-USD'].iloc[i] / price_data['BTC-USD'].iloc[i-1] - 1
                 btc_value = btc_values[-1] * (1 + btc_return)
             else:
                 btc_value = btc_values[-1]
             
             # ETH benchmark
             if 'ETH-USD' in price_data.columns:
-                eth_return = daily_returns['ETH-USD']
+                eth_return = price_data['ETH-USD'].iloc[i] / price_data['ETH-USD'].iloc[i-1] - 1
                 eth_value = eth_values[-1] * (1 + eth_return)
             else:
                 eth_value = eth_values[-1]
             
-            # Equal weight benchmark
-            equal_weight_return = sum(equal_weights[symbol] * daily_returns[symbol] for symbol in selected_symbols)
+            # Equal weight benchmark (also with rebalancing)
+            equal_weight_return = sum(equal_weights[symbol] * (price_data[symbol].iloc[i] / price_data[symbol].iloc[i-1] - 1) for symbol in selected_symbols)
             equal_weight_value = equal_weight_values[-1] * (1 + equal_weight_return)
         
         portfolio_values.append(portfolio_value)
@@ -1254,6 +1394,22 @@ elif mode == "Sample Backtest":
         legend=dict(orientation="v", yanchor="middle", y=0.5)
     )
     st.plotly_chart(fig_pie, use_container_width=True)
+    
+    # Rebalancing statistics
+    total_rebalance_cost = sum(rebalance_costs)
+    num_rebalances = len([cost for cost in rebalance_costs if cost > 0])
+    
+    st.subheader("Rebalancing Summary")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Rebalancing Frequency", rebalance_freq)
+    with col2:
+        st.metric("Number of Rebalances", f"{num_rebalances}")
+    with col3:
+        st.metric("Total Trading Costs", f"${total_rebalance_cost:,.0f}")
+    
+    if num_rebalances > 0:
+        st.info(f"Portfolio rebalanced {num_rebalances} times during the period. Trading costs: {total_rebalance_cost/initial_capital:.2%} of initial capital.")
     
     # Performance summary table
     st.subheader("Performance Summary")
@@ -1533,6 +1689,514 @@ elif mode == "Market Insights":
     
     summary_df = pd.DataFrame(summary_stats)
     st.dataframe(summary_df, use_container_width=True, hide_index=True)
+
+elif mode == "ML Predictions":
+    st.header("Machine Learning Predictions")
+    
+    # Get cached data
+    price_data, returns = get_cached_data(
+        selected_symbols, 
+        start_date.strftime('%Y-%m-%d'), 
+        end_date.strftime('%Y-%m-%d')
+    )
+    
+    # ML Configuration in sidebar
+    st.sidebar.subheader("ML Configuration")
+    prediction_days = st.sidebar.slider("Prediction Period (days)", 1, 30, 7)
+    train_window = st.sidebar.slider("Training Window (days)", 30, 365, 90)
+    
+    # Feature engineering function
+    def create_features(prices, window=20):
+        features = pd.DataFrame()
+        
+        # Price-based features
+        features['returns'] = prices.pct_change()
+        features['returns_lag1'] = features['returns'].shift(1)
+        features['returns_lag2'] = features['returns'].shift(2)
+        features['returns_lag3'] = features['returns'].shift(3)
+        
+        # Moving averages
+        features['ma_5'] = prices.rolling(5).mean() / prices
+        features['ma_10'] = prices.rolling(10).mean() / prices
+        features['ma_20'] = prices.rolling(20).mean() / prices
+        
+        # Volatility features
+        features['volatility_5'] = features['returns'].rolling(5).std()
+        features['volatility_10'] = features['returns'].rolling(10).std()
+        
+        # Momentum features
+        features['rsi'] = calculate_rsi(prices, 14)
+        features['momentum_5'] = prices / prices.shift(5) - 1
+        features['momentum_10'] = prices / prices.shift(10) - 1
+        
+        return features.dropna()
+    
+    # RSI calculation
+    def calculate_rsi(prices, window=14):
+        delta = prices.diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs))
+        return rsi
+    
+    # ML Prediction function
+    def predict_returns(prices, target_days=7, train_window=90):
+        features = create_features(prices)
+        
+        # Prepare target (future returns)
+        target = prices.shift(-target_days) / prices - 1
+        
+        # Align features and target
+        valid_idx = features.index.intersection(target.index)
+        X = features.loc[valid_idx].fillna(0)
+        y = target.loc[valid_idx].fillna(0)
+        
+        if len(X) < train_window:
+            return None, None, None
+        
+        # Use last train_window days for training
+        X_train = X.iloc[-train_window:-target_days] if len(X) > target_days else X.iloc[:-target_days]
+        y_train = y.iloc[-train_window:-target_days] if len(y) > target_days else y.iloc[:-target_days]
+        
+        if len(X_train) < 20:  # Minimum samples required
+            return None, None, None
+        
+        # Scale features
+        scaler = StandardScaler()
+        X_train_scaled = scaler.fit_transform(X_train)
+        
+        # Train models
+        models = {
+            'Random Forest': RandomForestRegressor(n_estimators=100, random_state=42, max_depth=10),
+            'Linear Regression': LinearRegression()
+        }
+        
+        predictions = {}
+        metrics = {}
+        
+        for name, model in models.items():
+            try:
+                model.fit(X_train_scaled, y_train)
+                
+                # Predict on the last available features
+                last_features = X.iloc[-1:].fillna(0)
+                last_features_scaled = scaler.transform(last_features)
+                pred = model.predict(last_features_scaled)[0]
+                predictions[name] = pred
+                
+                # Calculate metrics on training data
+                train_pred = model.predict(X_train_scaled)
+                metrics[name] = {
+                    'MSE': mean_squared_error(y_train, train_pred),
+                    'MAE': mean_absolute_error(y_train, train_pred),
+                    'R2': r2_score(y_train, train_pred) if len(set(y_train)) > 1 else 0
+                }
+            except Exception as e:
+                predictions[name] = 0
+                metrics[name] = {'MSE': float('inf'), 'MAE': float('inf'), 'R2': 0}
+        
+        return predictions, metrics, X_train.index
+    
+    # Run predictions for each cryptocurrency
+    st.subheader("Individual Asset Predictions")
+    
+    prediction_results = {}
+    all_predictions_data = []
+    
+    # Collect all prediction data first
+    for symbol in selected_symbols:
+        prices = price_data[symbol]
+        predictions, metrics, train_dates = predict_returns(prices, prediction_days, train_window)
+        
+        if predictions is None:
+            st.warning(f"Insufficient data for {symbol.replace('-USD', '')} predictions")
+            continue
+        
+        prediction_results[symbol] = predictions
+        
+        # Collect data for visualization
+        asset_name = symbol.replace('-USD', '')
+        for model_name, pred in predictions.items():
+            all_predictions_data.append({
+                'Asset': asset_name,
+                'Model': model_name,
+                'Prediction': pred,
+                'R2_Score': metrics[model_name]['R2'],
+                'MAE': metrics[model_name]['MAE']
+            })
+    
+    if all_predictions_data:
+        predictions_df = pd.DataFrame(all_predictions_data)
+        
+        # Create comprehensive prediction visualization
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Bar chart for predictions by asset and model
+            fig_bar = px.bar(
+                predictions_df,
+                x='Asset',
+                y='Prediction',
+                color='Model',
+                title=f"Predicted Returns by Asset ({prediction_days} days)",
+                labels={'Prediction': 'Predicted Return'},
+                text=[f"{val:.1%}" for val in predictions_df['Prediction']],
+                color_discrete_map={
+                    'Random Forest': '#2E8B57',
+                    'Linear Regression': '#4169E1'
+                }
+            )
+            fig_bar.update_traces(textposition='outside')
+            
+            # Calculate y-axis range with generous padding for text visibility
+            y_min = predictions_df['Prediction'].min()
+            y_max = predictions_df['Prediction'].max()
+            y_range = y_max - y_min
+            
+            # Ensure sufficient padding for text labels above bars
+            top_padding = max(0.04, y_range * 0.5)  # At least 4% or 50% of range for top
+            bottom_padding = max(0.02, y_range * 0.2)  # At least 2% or 20% of range for bottom
+            
+            fig_bar.update_layout(
+                template='plotly_white',
+                height=400,
+                yaxis_tickformat='.1%',
+                xaxis_title="Cryptocurrency",
+                yaxis_title="Predicted Return",
+                yaxis=dict(
+                    range=[y_min - bottom_padding, y_max + top_padding]
+                )
+            )
+            st.plotly_chart(fig_bar, use_container_width=True)
+        
+        with col2:
+            # Model agreement analysis
+            agreement_data = []
+            for symbol in selected_symbols:
+                if symbol in prediction_results:
+                    asset_name = symbol.replace('-USD', '')
+                    rf_pred = prediction_results[symbol].get('Random Forest', 0)
+                    lr_pred = prediction_results[symbol].get('Linear Regression', 0)
+                    
+                    # Calculate agreement metrics
+                    avg_pred = (rf_pred + lr_pred) / 2
+                    agreement_score = 1 - abs(rf_pred - lr_pred) / max(abs(avg_pred), 0.01)
+                    agreement_score = max(0, min(1, agreement_score)) * 100  # Convert to 0-100%
+                    
+                    agreement_data.append({
+                        'Asset': asset_name,
+                        'Agreement_Score': agreement_score,
+                        'Difference': abs(rf_pred - lr_pred) * 100,  # Convert to percentage points
+                        'Average_Prediction': avg_pred * 100
+                    })
+            
+            if agreement_data:
+                agreement_df = pd.DataFrame(agreement_data)
+                
+                # Create model agreement visualization
+                fig_agreement = px.bar(
+                    agreement_df,
+                    x='Asset',
+                    y='Agreement_Score',
+                    color='Agreement_Score',
+                    color_continuous_scale='RdYlGn',
+                    title="Model Agreement Score by Asset",
+                    labels={'Agreement_Score': 'Agreement Score (%)'},
+                    text=[f"{val:.0f}%" for val in agreement_df['Agreement_Score']],
+                    hover_data={
+                        'Difference': ':.1f',
+                        'Average_Prediction': ':.1f'
+                    }
+                )
+                
+                fig_agreement.update_traces(textposition='outside')
+                fig_agreement.update_layout(
+                    template='plotly_white',
+                    height=400,
+                    xaxis_title="Cryptocurrency",
+                    yaxis_title="Model Agreement (%)",
+                    yaxis=dict(range=[0, 105]),
+                    showlegend=False
+                )
+                
+                st.plotly_chart(fig_agreement, use_container_width=True)
+        
+        # Detailed predictions table
+        st.subheader("Detailed Predictions Summary")
+        
+        # Create a more readable table
+        table_data = []
+        for symbol in selected_symbols:
+            if symbol in prediction_results:
+                asset_name = symbol.replace('-USD', '')
+                rf_pred = prediction_results[symbol].get('Random Forest', 0)
+                lr_pred = prediction_results[symbol].get('Linear Regression', 0)
+                avg_pred = (rf_pred + lr_pred) / 2
+                
+                table_data.append({
+                    'Asset': asset_name,
+                    'Random Forest': f"{rf_pred:.2%}",
+                    'Linear Regression': f"{lr_pred:.2%}",
+                    'Average': f"{avg_pred:.2%}",
+                    'Confidence': "High" if abs(rf_pred - lr_pred) < 0.02 else "Medium" if abs(rf_pred - lr_pred) < 0.05 else "Low"
+                })
+        
+        if table_data:
+            summary_df = pd.DataFrame(table_data)
+            st.dataframe(summary_df, use_container_width=True, hide_index=True)
+    
+    # Portfolio-level predictions
+    if prediction_results:
+        st.subheader("Portfolio-Level Predictions")
+        
+        # Allow user to input portfolio weights
+        st.write("**Define Portfolio Weights for Prediction**")
+        portfolio_weights = {}
+        cols = st.columns(min(len(selected_symbols), 3))
+        
+        total_weight = 0
+        for i, symbol in enumerate(selected_symbols):
+            with cols[i % len(cols)]:
+                weight = st.number_input(
+                    f"{symbol.replace('-USD', '')} Weight",
+                    min_value=0.0,
+                    max_value=1.0,
+                    value=1.0/len(selected_symbols),
+                    step=0.05,
+                    key=f"ml_weight_{symbol}"
+                )
+                portfolio_weights[symbol] = weight
+                total_weight += weight
+        
+        # Normalize weights
+        if total_weight > 0:
+            normalized_weights = {k: v/total_weight for k, v in portfolio_weights.items()}
+        else:
+            normalized_weights = {k: 1.0/len(selected_symbols) for k in selected_symbols}
+        
+        # Calculate portfolio predictions
+        portfolio_predictions = {'Random Forest': 0, 'Linear Regression': 0}
+        
+        for symbol in selected_symbols:
+            if symbol in prediction_results:
+                for model_name in portfolio_predictions.keys():
+                    portfolio_predictions[model_name] += (
+                        normalized_weights[symbol] * prediction_results[symbol][model_name]
+                    )
+        
+        # Display portfolio predictions
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.metric(
+                "Random Forest Portfolio Prediction",
+                f"{portfolio_predictions['Random Forest']:.2%}",
+                delta=f"{prediction_days}-day forecast"
+            )
+        
+        with col2:
+            st.metric(
+                "Linear Regression Portfolio Prediction", 
+                f"{portfolio_predictions['Linear Regression']:.2%}",
+                delta=f"{prediction_days}-day forecast"
+            )
+        
+        # Ensemble prediction (average)
+        ensemble_prediction = np.mean(list(portfolio_predictions.values()))
+        st.metric(
+            "Ensemble Portfolio Prediction",
+            f"{ensemble_prediction:.2%}",
+            delta="Average of all models"
+        )
+        
+        # Visualization of predictions
+        st.subheader("Prediction Visualization")
+        
+        # Create prediction chart
+        fig_pred = go.Figure()
+        
+        models = list(portfolio_predictions.keys())
+        predictions_vals = list(portfolio_predictions.values())
+        
+        fig_pred.add_trace(go.Bar(
+            x=models + ['Ensemble'],
+            y=predictions_vals + [ensemble_prediction],
+            marker_color=['#1f77b4', '#ff7f0e', '#2ca02c'],
+            text=[f"{val:.2%}" for val in predictions_vals + [ensemble_prediction]],
+            textposition='auto'
+        ))
+        
+        fig_pred.update_layout(
+            title=f"Portfolio Return Predictions ({prediction_days} days)",
+            yaxis_title="Predicted Return",
+            template='plotly_white',
+            height=400
+        )
+        
+        st.plotly_chart(fig_pred, use_container_width=True)
+        
+        # Enhanced Asset Analysis
+        st.subheader("Asset Analysis Dashboard")
+        
+        # Create comprehensive comparison visualization
+        comparison_data = []
+        for symbol in selected_symbols:
+            if symbol in prediction_results:
+                asset_name = symbol.replace('-USD', '')
+                rf_pred = prediction_results[symbol].get('Random Forest', 0)
+                lr_pred = prediction_results[symbol].get('Linear Regression', 0)
+                avg_pred = (rf_pred + lr_pred) / 2
+                weight = normalized_weights[symbol]
+                
+                comparison_data.append({
+                    'Asset': asset_name,
+                    'Weight': weight,
+                    'Random_Forest': rf_pred,
+                    'Linear_Regression': lr_pred,
+                    'Average_Prediction': avg_pred,
+                    'Weighted_Impact': weight * avg_pred,
+                    'Weight_Category': 'High (>20%)' if weight > 0.2 else 'Medium (5-20%)' if weight > 0.05 else 'Low (<5%)'
+                })
+        
+        if comparison_data:
+            comparison_df = pd.DataFrame(comparison_data)
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Bubble chart: Weight vs Prediction with Impact as size
+                fig_bubble = px.scatter(
+                    comparison_df,
+                    x='Weight',
+                    y='Average_Prediction',
+                    size=[abs(x)*100+10 for x in comparison_df['Weighted_Impact']],
+                    color='Weight_Category',
+                    hover_name='Asset',
+                    hover_data={
+                        'Weight': ':.1%',
+                        'Average_Prediction': ':.2%',
+                        'Weighted_Impact': ':.3%',
+                        'Weight_Category': False
+                    },
+                    title="Portfolio Weight vs Predicted Return",
+                    labels={
+                        'Weight': 'Portfolio Weight',
+                        'Average_Prediction': 'Average Predicted Return'
+                    },
+                    color_discrete_map={
+                        'High (>20%)': '#FF6B6B',
+                        'Medium (5-20%)': '#4ECDC4', 
+                        'Low (<5%)': '#95A5A6'
+                    }
+                )
+                
+                # Add annotations for each asset
+                for _, row in comparison_df.iterrows():
+                    fig_bubble.add_annotation(
+                        x=row['Weight'],
+                        y=row['Average_Prediction'],
+                        text=row['Asset'],
+                        showarrow=False,
+                        font=dict(size=10),
+                        yshift=15
+                    )
+                
+                fig_bubble.update_layout(
+                    template='plotly_white',
+                    height=450,
+                    xaxis_tickformat='.1%',
+                    yaxis_tickformat='.1%'
+                )
+                
+                st.plotly_chart(fig_bubble, use_container_width=True)
+            
+            with col2:
+                # Risk-Return prediction quadrant
+                risk_return_data = []
+                for _, row in comparison_df.iterrows():
+                    # Calculate prediction volatility (difference between models as proxy for uncertainty)
+                    pred_uncertainty = abs(row['Random_Forest'] - row['Linear_Regression'])
+                    
+                    risk_return_data.append({
+                        'Asset': row['Asset'],
+                        'Expected_Return': row['Average_Prediction'] * 100,
+                        'Prediction_Uncertainty': pred_uncertainty * 100,
+                        'Weight': row['Weight'],
+                        'Size_Factor': row['Weight'] * 1000 + 20  # For bubble sizing
+                    })
+                
+                risk_return_df = pd.DataFrame(risk_return_data)
+                
+                fig_risk_return = px.scatter(
+                    risk_return_df,
+                    x='Prediction_Uncertainty',
+                    y='Expected_Return',
+                    size='Size_Factor',
+                    color='Expected_Return',
+                    color_continuous_scale='RdYlGn',
+                    hover_name='Asset',
+                    hover_data={
+                        'Weight': ':.1%',
+                        'Prediction_Uncertainty': ':.2f',
+                        'Expected_Return': ':.2f',
+                        'Size_Factor': False
+                    },
+                    title="Return vs Prediction Uncertainty",
+                    labels={
+                        'Prediction_Uncertainty': 'Model Disagreement (%)',
+                        'Expected_Return': 'Expected Return (%)'
+                    }
+                )
+                
+                # Add asset labels
+                for _, row in risk_return_df.iterrows():
+                    fig_risk_return.add_annotation(
+                        x=row['Prediction_Uncertainty'],
+                        y=row['Expected_Return'],
+                        text=row['Asset'],
+                        showarrow=False,
+                        font=dict(size=9),
+                        yshift=15
+                    )
+                
+                fig_risk_return.update_layout(
+                    template='plotly_white',
+                    height=450,
+                    showlegend=False
+                )
+                
+                st.plotly_chart(fig_risk_return, use_container_width=True)
+            
+            # Portfolio impact summary table
+            st.subheader("Portfolio Impact Analysis")
+            
+            impact_df = comparison_df[['Asset', 'Weight', 'Average_Prediction', 'Weighted_Impact']].copy()
+            impact_df['Weight'] = impact_df['Weight'].apply(lambda x: f"{x:.1%}")
+            impact_df['Average_Prediction'] = impact_df['Average_Prediction'].apply(lambda x: f"{x:.2%}")
+            impact_df['Weighted_Impact'] = impact_df['Weighted_Impact'].apply(lambda x: f"{x:.3%}")
+            impact_df = impact_df.rename(columns={
+                'Average_Prediction': 'Predicted Return',
+                'Weighted_Impact': 'Portfolio Impact'
+            })
+            
+            # Sort by absolute portfolio impact
+            impact_df['Sort_Key'] = comparison_df['Weighted_Impact'].abs()
+            impact_df = impact_df.sort_values('Sort_Key', ascending=False).drop('Sort_Key', axis=1)
+            
+            st.dataframe(impact_df, use_container_width=True, hide_index=True)
+    
+    # Disclaimer
+    st.subheader("Important Disclaimer")
+    st.warning("""
+    **Machine Learning Predictions Disclaimer:**
+    - These predictions are based on historical patterns and technical indicators
+    - Cryptocurrency markets are highly volatile and unpredictable
+    - Past performance does not guarantee future results
+    - ML models can be inaccurate, especially during market regime changes
+    - Use predictions as one factor among many for decision-making
+    - Never invest based solely on algorithmic predictions
+    """)
 
 else:  # Portfolio Analysis
     st.header("Portfolio Analysis & Overview")
