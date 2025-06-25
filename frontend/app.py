@@ -82,34 +82,46 @@ def apply_theme_css(theme):
         padding: 1.5rem 2rem;
         max-width: 1200px;
         margin: 0 auto;
+        width: 100%;
+        box-sizing: border-box;
     }
     
-    /* Coinbase-style sidebar */
-    .css-1d391kg {
+    /* Stable sidebar styling */
+    .stSidebar {
         background: var(--cb-card-bg) !important;
         border-right: 1px solid var(--cb-border) !important;
         box-shadow: var(--cb-shadow);
+        width: 300px !important;
+        min-width: 300px !important;
+        max-width: 300px !important;
     }
     
-    .css-1d391kg .css-1v0mbdj {
-        color: var(--cb-text-primary) !important;
+    .stSidebar .stSidebarContent {
+        background: var(--cb-card-bg) !important;
+        width: 100% !important;
     }
     
-    .css-1d391kg label {
+    .stSidebar label {
         color: var(--cb-text-primary) !important;
         font-weight: 500 !important;
         font-size: 0.875rem !important;
         margin-bottom: 0.5rem !important;
     }
     
-    .css-1d391kg h1, .css-1d391kg h2, .css-1d391kg h3 {
+    .stSidebar h1, .stSidebar h2, .stSidebar h3 {
         color: var(--cb-text-primary) !important;
         font-weight: 600 !important;
     }
     
-    .css-1d391kg p {
+    .stSidebar p {
         color: var(--cb-text-secondary) !important;
         font-size: 0.875rem !important;
+    }
+    
+    /* Prevent content overflow */
+    .main {
+        overflow-x: auto;
+        width: 100%;
     }
     
     /* Coinbase-style buttons */

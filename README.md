@@ -18,7 +18,7 @@ A web application for cryptocurrency portfolio optimization and analysis with ma
 ```bash
 git clone https://github.com/zhangxiany-tamu/Crypto_Portfolio.git
 cd Crypto_Portfolio
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
 ### Run the Application
