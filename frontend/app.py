@@ -346,8 +346,13 @@ def apply_theme_css(theme):
     }
     
     
-    /* Ensure sidebar collapse button is always visible */
-    button[data-testid="collapsedControl"] {
+    /* Multiple selectors for sidebar collapse button - covers all cases */
+    button[data-testid="collapsedControl"],
+    button[data-testid="baseButton-header"],
+    .stButton button[title*="sidebar"],
+    button[aria-label*="sidebar"],
+    button[title*="Sidebar"],
+    button[aria-label*="Sidebar"] {
         display: block !important;
         position: fixed !important;
         top: 1rem !important;
@@ -360,11 +365,26 @@ def apply_theme_css(theme):
         width: 3rem !important;
         height: 3rem !important;
         box-shadow: var(--cb-shadow-hover) !important;
+        opacity: 1 !important;
+        visibility: visible !important;
     }
     
-    button[data-testid="collapsedControl"]:hover {
+    button[data-testid="collapsedControl"]:hover,
+    button[data-testid="baseButton-header"]:hover,
+    .stButton button[title*="sidebar"]:hover,
+    button[aria-label*="sidebar"]:hover,
+    button[title*="Sidebar"]:hover,
+    button[aria-label*="Sidebar"]:hover {
         background: #1347cc !important;
         transform: scale(1.1) !important;
+    }
+    
+    /* Force visibility of any hidden collapse controls */
+    .stApp > header button,
+    [data-testid="stHeader"] button {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
     }
     
     /* Responsive sidebar - let Streamlit handle collapse naturally */
@@ -402,6 +422,79 @@ def apply_theme_css(theme):
         }
     }
 </style>
+
+<script>
+// Ensure sidebar toggle button is always available
+function ensureSidebarToggle() {
+    // Check if sidebar is collapsed
+    const sidebar = document.querySelector('[data-testid="stSidebar"]');
+    const isSidebarCollapsed = !sidebar || sidebar.style.display === 'none' || 
+                              sidebar.offsetWidth === 0 || sidebar.classList.contains('collapsed');
+    
+    if (isSidebarCollapsed) {
+        // Remove any existing custom toggle
+        const existingToggle = document.getElementById('custom-sidebar-toggle');
+        if (existingToggle) existingToggle.remove();
+        
+        // Create custom toggle button
+        const toggleButton = document.createElement('button');
+        toggleButton.id = 'custom-sidebar-toggle';
+        toggleButton.innerHTML = '☰';
+        toggleButton.style.cssText = `
+            position: fixed !important;
+            top: 1rem !important;
+            left: 1rem !important;
+            z-index: 999999 !important;
+            background: #1652f0 !important;
+            color: white !important;
+            border: none !important;
+            border-radius: 50% !important;
+            width: 3rem !important;
+            height: 3rem !important;
+            font-size: 1.2rem !important;
+            cursor: pointer !important;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15) !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        `;
+        
+        toggleButton.onclick = function() {
+            // Try multiple ways to show sidebar
+            const sidebar = document.querySelector('[data-testid="stSidebar"]');
+            if (sidebar) {
+                sidebar.style.display = 'block';
+                sidebar.style.width = '';
+                sidebar.classList.remove('collapsed');
+            }
+            
+            // Try clicking the original toggle if it exists
+            const originalToggle = document.querySelector('button[data-testid="collapsedControl"]') ||
+                                 document.querySelector('button[data-testid="baseButton-header"]');
+            if (originalToggle) {
+                originalToggle.click();
+            }
+            
+            // Force Streamlit rerun to refresh sidebar state
+            window.parent.postMessage({type: 'streamlit:componentReady'}, '*');
+        };
+        
+        document.body.appendChild(toggleButton);
+    } else {
+        // Remove custom toggle if sidebar is visible
+        const customToggle = document.getElementById('custom-sidebar-toggle');
+        if (customToggle) customToggle.remove();
+    }
+}
+
+// Run on load and monitor for changes
+document.addEventListener('DOMContentLoaded', ensureSidebarToggle);
+setInterval(ensureSidebarToggle, 500);
+
+// Also monitor for Streamlit updates
+const observer = new MutationObserver(ensureSidebarToggle);
+observer.observe(document.body, { childList: true, subtree: true });
+</script>
 """
     else:  # dark theme (Coinbase-inspired)
         return """
