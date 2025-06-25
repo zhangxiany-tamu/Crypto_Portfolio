@@ -59,7 +59,13 @@ Open your browser to `http://localhost:8501`
 
 ## Supported Assets
 
-BTC, ETH, BNB, XRP, ADA, SOL, MATIC, DOT, AVAX, LINK, UNI, LTC, BCH, ATOM, ALGO
+**30 cryptocurrencies across major categories:**
+
+**Top Market Cap:** BTC, ETH, XRP, BNB, SOL, DOGE, ADA, TRX, SHIB, AVAX
+
+**DeFi & Layer 1/2:** LINK, DOT, UNI, AAVE, MATIC, NEAR, ICP, APT, SUI, ATOM
+
+**Established Coins:** LTC, BCH, XLM, XMR, ETC, HBAR, TON, ALGO, VET, FTM
 
 ## AI Integration
 

@@ -16,28 +16,56 @@ class RobustDataFetcher:
     
     def __init__(self):
         self.crypto_symbols = [
-            'BTC-USD', 'ETH-USD', 'BNB-USD', 'XRP-USD', 'ADA-USD', 
-            'SOL-USD', 'MATIC-USD', 'DOT-USD', 'AVAX-USD', 'LINK-USD',
-            'UNI-USD', 'LTC-USD', 'BCH-USD', 'ATOM-USD', 'ALGO-USD'
+            # Top 10 by market cap
+            'BTC-USD', 'ETH-USD', 'XRP-USD', 'BNB-USD', 'SOL-USD',
+            'DOGE-USD', 'ADA-USD', 'TRX-USD', 'SHIB-USD', 'AVAX-USD',
+            
+            # Major DeFi and Layer 1/2
+            'LINK-USD', 'DOT-USD', 'UNI-USD', 'AAVE-USD', 'MATIC-USD',
+            'NEAR-USD', 'ICP-USD', 'APT-USD', 'SUI-USD', 'ATOM-USD',
+            
+            # Established cryptocurrencies
+            'LTC-USD', 'BCH-USD', 'XLM-USD', 'XMR-USD', 'ETC-USD',
+            'HBAR-USD', 'TON-USD', 'ALGO-USD', 'VET-USD', 'FTM-USD'
         ]
         
         # CoinGecko symbol mapping
         self.coingecko_map = {
+            # Top 10 by market cap
             'BTC-USD': 'bitcoin',
-            'ETH-USD': 'ethereum', 
-            'BNB-USD': 'binancecoin',
+            'ETH-USD': 'ethereum',
             'XRP-USD': 'ripple',
-            'ADA-USD': 'cardano',
+            'BNB-USD': 'binancecoin',
             'SOL-USD': 'solana',
-            'MATIC-USD': 'polygon',
-            'DOT-USD': 'polkadot',
+            'DOGE-USD': 'dogecoin',
+            'ADA-USD': 'cardano',
+            'TRX-USD': 'tron',
+            'SHIB-USD': 'shiba-inu',
             'AVAX-USD': 'avalanche-2',
+            
+            # Major DeFi and Layer 1/2
             'LINK-USD': 'chainlink',
+            'DOT-USD': 'polkadot',
             'UNI-USD': 'uniswap',
+            'AAVE-USD': 'aave',
+            'MATIC-USD': 'matic-network',
+            'NEAR-USD': 'near',
+            'ICP-USD': 'internet-computer',
+            'APT-USD': 'aptos',
+            'SUI-USD': 'sui',
+            'ATOM-USD': 'cosmos',
+            
+            # Established cryptocurrencies
             'LTC-USD': 'litecoin',
             'BCH-USD': 'bitcoin-cash',
-            'ATOM-USD': 'cosmos',
-            'ALGO-USD': 'algorand'
+            'XLM-USD': 'stellar',
+            'XMR-USD': 'monero',
+            'ETC-USD': 'ethereum-classic',
+            'HBAR-USD': 'hedera-hashgraph',
+            'TON-USD': 'the-open-network',
+            'ALGO-USD': 'algorand',
+            'VET-USD': 'vechain',
+            'FTM-USD': 'fantom'
         }
         
         self.cg = CoinGeckoAPI()
@@ -137,21 +165,39 @@ class RobustDataFetcher:
         """Fetch data from Binance public API (no auth required)"""
         try:
             binance_map = {
+                # Top cryptocurrencies
                 'BTC-USD': 'BTCUSDT',
-                'ETH-USD': 'ETHUSDT', 
-                'BNB-USD': 'BNBUSDT',
+                'ETH-USD': 'ETHUSDT',
                 'XRP-USD': 'XRPUSDT',
-                'ADA-USD': 'ADAUSDT',
+                'BNB-USD': 'BNBUSDT',
                 'SOL-USD': 'SOLUSDT',
-                'MATIC-USD': 'MATICUSDT',
-                'DOT-USD': 'DOTUSDT',
+                'DOGE-USD': 'DOGEUSDT',
+                'ADA-USD': 'ADAUSDT',
+                'TRX-USD': 'TRXUSDT',
+                'SHIB-USD': 'SHIBUSDT',
                 'AVAX-USD': 'AVAXUSDT',
+                
+                # DeFi and Layer 1/2
                 'LINK-USD': 'LINKUSDT',
+                'DOT-USD': 'DOTUSDT',
                 'UNI-USD': 'UNIUSDT',
+                'AAVE-USD': 'AAVEUSDT',
+                'MATIC-USD': 'MATICUSDT',
+                'NEAR-USD': 'NEARUSDT',
+                'ICP-USD': 'ICPUSDT',
+                'APT-USD': 'APTUSDT',
+                'SUI-USD': 'SUIUSDT',
+                'ATOM-USD': 'ATOMUSDT',
+                
+                # Established coins
                 'LTC-USD': 'LTCUSDT',
                 'BCH-USD': 'BCHUSDT',
-                'ATOM-USD': 'ATOMUSDT',
-                'ALGO-USD': 'ALGOUSDT'
+                'XLM-USD': 'XLMUSDT',
+                'ETC-USD': 'ETCUSDT',
+                'HBAR-USD': 'HBARUSDT',
+                'ALGO-USD': 'ALGOUSDT',
+                'VET-USD': 'VETUSDT',
+                'FTM-USD': 'FTMUSDT'
             }
             
             start_ts = int(datetime.strptime(start_date, '%Y-%m-%d').timestamp() * 1000)
@@ -212,16 +258,32 @@ class RobustDataFetcher:
         
         # More realistic starting prices (closer to current market)
         starting_prices = {
-            'BTC-USD': 95000, 'ETH-USD': 3400, 'BNB-USD': 650, 'XRP-USD': 2.20, 'ADA-USD': 0.85,
-            'SOL-USD': 220, 'MATIC-USD': 0.95, 'DOT-USD': 7.5, 'AVAX-USD': 42, 'LINK-USD': 22,
-            'UNI-USD': 12, 'LTC-USD': 110, 'BCH-USD': 450, 'ATOM-USD': 12, 'ALGO-USD': 0.35
+            # Top 10 by market cap
+            'BTC-USD': 106000, 'ETH-USD': 2460, 'XRP-USD': 2.19, 'BNB-USD': 645, 'SOL-USD': 146,
+            'DOGE-USD': 0.17, 'ADA-USD': 0.59, 'TRX-USD': 0.27, 'SHIB-USD': 0.000012, 'AVAX-USD': 18.3,
+            
+            # Major DeFi and Layer 1/2
+            'LINK-USD': 13.46, 'DOT-USD': 3.45, 'UNI-USD': 7.34, 'AAVE-USD': 269, 'MATIC-USD': 0.4,
+            'NEAR-USD': 2.19, 'ICP-USD': 4.99, 'APT-USD': 4.94, 'SUI-USD': 2.82, 'ATOM-USD': 4.2,
+            
+            # Established cryptocurrencies
+            'LTC-USD': 85.19, 'BCH-USD': 478, 'XLM-USD': 0.25, 'XMR-USD': 316, 'ETC-USD': 16.53,
+            'HBAR-USD': 0.16, 'TON-USD': 2.91, 'ALGO-USD': 0.24, 'VET-USD': 0.045, 'FTM-USD': 0.6
         }
         
         # Crypto-specific volatility patterns
         volatilities = {
-            'BTC-USD': 0.045, 'ETH-USD': 0.055, 'BNB-USD': 0.065, 'XRP-USD': 0.075, 'ADA-USD': 0.080,
-            'SOL-USD': 0.090, 'MATIC-USD': 0.085, 'DOT-USD': 0.070, 'AVAX-USD': 0.085, 'LINK-USD': 0.075,
-            'UNI-USD': 0.080, 'LTC-USD': 0.060, 'BCH-USD': 0.065, 'ATOM-USD': 0.075, 'ALGO-USD': 0.085
+            # Top 10 (lower volatility for larger market caps)
+            'BTC-USD': 0.045, 'ETH-USD': 0.055, 'XRP-USD': 0.075, 'BNB-USD': 0.065, 'SOL-USD': 0.090,
+            'DOGE-USD': 0.12, 'ADA-USD': 0.080, 'TRX-USD': 0.085, 'SHIB-USD': 0.15, 'AVAX-USD': 0.085,
+            
+            # Major DeFi and Layer 1/2 (moderate to high volatility)
+            'LINK-USD': 0.075, 'DOT-USD': 0.070, 'UNI-USD': 0.080, 'AAVE-USD': 0.095, 'MATIC-USD': 0.085,
+            'NEAR-USD': 0.095, 'ICP-USD': 0.10, 'APT-USD': 0.11, 'SUI-USD': 0.12, 'ATOM-USD': 0.075,
+            
+            # Established (moderate volatility)
+            'LTC-USD': 0.060, 'BCH-USD': 0.065, 'XLM-USD': 0.085, 'XMR-USD': 0.070, 'ETC-USD': 0.080,
+            'HBAR-USD': 0.095, 'TON-USD': 0.090, 'ALGO-USD': 0.085, 'VET-USD': 0.095, 'FTM-USD': 0.10
         }
         
         for symbol in symbols:
