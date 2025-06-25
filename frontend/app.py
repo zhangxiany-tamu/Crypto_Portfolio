@@ -4,7 +4,7 @@ import streamlit as st
 st.set_page_config(
     page_title="Crypto Portfolio Optimizer",
     page_icon="₿",
-    layout="centered",
+    layout="wide",
     initial_sidebar_state="expanded"
 )
 
@@ -116,9 +116,10 @@ def apply_theme_css(theme):
         font-size: 0.875rem !important;
     }
     
-    /* Let Streamlit handle main content layout naturally */
+    /* Adaptive main content for wide layout */
     .main .block-container {
-        max-width: 1200px !important;
+        max-width: none !important;
+        width: 100% !important;
         padding: 1rem 2rem !important;
     }
     
@@ -345,72 +346,59 @@ def apply_theme_css(theme):
     }
     
     
-    /* Responsive sidebar with proper collapse behavior */
-    [data-testid="stSidebar"] {
-        width: 21rem !important;
-        min-width: 21rem !important;
-        max-width: 21rem !important;
-        transition: all 0.3s ease !important;
-    }
-    
-    /* When sidebar is collapsed (Streamlit adds this class) */
-    [data-testid="stSidebar"][aria-expanded="false"],
-    [data-testid="stSidebar"].collapsed {
-        width: 0 !important;
-        min-width: 0 !important;
-        max-width: 0 !important;
-        overflow: hidden !important;
+    /* Ensure sidebar collapse button is always visible */
+    button[data-testid="collapsedControl"] {
+        display: block !important;
+        position: fixed !important;
+        top: 1rem !important;
+        left: 1rem !important;
+        z-index: 999999 !important;
+        background: var(--cb-blue) !important;
+        color: white !important;
         border: none !important;
+        border-radius: 50% !important;
+        width: 3rem !important;
+        height: 3rem !important;
+        box-shadow: var(--cb-shadow-hover) !important;
     }
     
-    /* Hide content when collapsed */
-    [data-testid="stSidebar"][aria-expanded="false"] > div,
-    [data-testid="stSidebar"].collapsed > div {
-        display: none !important;
+    button[data-testid="collapsedControl"]:hover {
+        background: #1347cc !important;
+        transform: scale(1.1) !important;
     }
     
-    /* Make main content adaptive to sidebar state */
-    .main {
-        width: calc(100% - 21rem) !important;
-        margin-left: 21rem !important;
+    /* Responsive sidebar - let Streamlit handle collapse naturally */
+    [data-testid="stSidebar"] {
         transition: all 0.3s ease !important;
     }
     
-    /* When sidebar is collapsed, main takes full width */
-    [data-testid="stSidebar"][aria-expanded="false"] ~ .main,
-    [data-testid="stSidebar"].collapsed ~ .main {
+    /* Responsive main content that adapts to screen size */
+    .main .block-container {
         width: 100% !important;
-        margin-left: 0 !important;
+        max-width: 100% !important;
+        padding: clamp(1rem, 3vw, 3rem) !important;
     }
     
-    /* Responsive breakpoints for better mobile experience */
-    @media screen and (max-width: 1024px) {
-        [data-testid="stSidebar"] {
-            width: 18rem !important;
-            min-width: 18rem !important;
-            max-width: 18rem !important;
-        }
-        
-        .main {
-            width: calc(100% - 18rem) !important;
-            margin-left: 18rem !important;
-        }
-    }
-    
+    /* Responsive breakpoints for different screen sizes */
     @media screen and (max-width: 768px) {
-        [data-testid="stSidebar"] {
-            width: 16rem !important;
-            min-width: 16rem !important;
-            max-width: 16rem !important;
-        }
-        
-        .main {
-            width: calc(100% - 16rem) !important;
-            margin-left: 16rem !important;
-        }
-        
         .main .block-container {
-            padding: 1rem !important;
+            padding: 0.5rem !important;
+        }
+        
+        [data-testid="stSidebar"] > div {
+            padding: 0.5rem !important;
+        }
+    }
+    
+    @media screen and (min-width: 1200px) {
+        .main .block-container {
+            padding: 2rem 4rem !important;
+        }
+    }
+    
+    @media screen and (min-width: 1600px) {
+        .main .block-container {
+            padding: 3rem 6rem !important;
         }
     }
 </style>
