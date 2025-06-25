@@ -21,6 +21,8 @@ from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import warnings
+import requests
+import json
 warnings.filterwarnings('ignore')
 
 # Add parent directory to path for imports
@@ -755,7 +757,7 @@ st.sidebar.title("Portfolio Configuration")
 # Mode selection
 mode = st.sidebar.selectbox(
     "Select Mode",
-    ["Portfolio Analysis", "Portfolio Optimization", "Sample Backtest", "Market Insights", "ML Predictions"]
+    ["Portfolio Analysis", "Portfolio Optimization", "Sample Backtest", "Market Insights", "ML Predictions", "AI Investment Advisor"]
 )
 
 # Common parameters
@@ -2196,6 +2198,657 @@ elif mode == "ML Predictions":
     - ML models can be inaccurate, especially during market regime changes
     - Use predictions as one factor among many for decision-making
     - Never invest based solely on algorithmic predictions
+    """)
+
+elif mode == "AI Investment Advisor":
+    st.header("AI Investment Advisor")
+    
+    # API Configuration in sidebar
+    st.sidebar.subheader("AI Configuration")
+    
+    # LLM Provider selection
+    llm_provider = st.sidebar.selectbox(
+        "Select AI Provider",
+        ["OpenAI (GPT-4)", "Anthropic (Claude)", "Google (Gemini)"]
+    )
+    
+    # API Key input
+    api_key = st.sidebar.text_input(
+        "API Key",
+        type="password",
+        help="Enter your API key for the selected provider"
+    )
+    
+    if not api_key:
+        st.warning("Please enter your API key in the sidebar to get AI investment advice.")
+        st.info("""
+        **How to get API keys:**
+        - **OpenAI**: Visit https://platform.openai.com/api-keys
+        - **Anthropic**: Visit https://console.anthropic.com/
+        - **Google**: Visit https://ai.google.dev/
+        """)
+        st.stop()
+    
+    # Risk tolerance for AI analysis
+    risk_tolerance = st.sidebar.selectbox(
+        "Risk Tolerance",
+        ["Conservative", "Moderate", "Aggressive"]
+    )
+    
+    # Investment horizon
+    investment_horizon = st.sidebar.selectbox(
+        "Investment Horizon",
+        ["Short-term (1-3 months)", "Medium-term (3-12 months)", "Long-term (1+ years)"]
+    )
+    
+    # Current Portfolio Definition
+    st.subheader("Define Your Current Portfolio")
+    
+    portfolio_option = st.radio(
+        "How would you like to define your current portfolio?",
+        ["Equal Weight (Default)", "Custom Allocation", "Portfolio Analysis Mode Weights"],
+        help="Choose how to represent your current portfolio holdings"
+    )
+    
+    current_portfolio_weights = {}
+    
+    if portfolio_option == "Equal Weight (Default)":
+        # Equal weight allocation
+        equal_weight = 100 / len(selected_symbols)
+        for symbol in selected_symbols:
+            current_portfolio_weights[symbol.replace('-USD', '')] = equal_weight
+        
+        st.info(f"Using equal weight allocation: {equal_weight:.1f}% per asset")
+        
+    elif portfolio_option == "Custom Allocation":
+        st.write("**Enter your current portfolio allocation (%):**")
+        
+        # Create columns for input
+        n_cols = min(len(selected_symbols), 3)
+        cols = st.columns(n_cols)
+        
+        total_weight = 0
+        for i, symbol in enumerate(selected_symbols):
+            col_idx = i % n_cols
+            with cols[col_idx]:
+                weight = st.number_input(
+                    f"{symbol.replace('-USD', '')} %", 
+                    min_value=0.0, 
+                    max_value=100.0, 
+                    value=100.0/len(selected_symbols),
+                    step=5.0,
+                    key=f"current_weight_{symbol}"
+                )
+                current_portfolio_weights[symbol.replace('-USD', '')] = weight
+                total_weight += weight
+        
+        # Validation
+        if abs(total_weight - 100) > 0.1:
+            st.error(f"Portfolio weights must sum to 100%. Current total: {total_weight:.1f}%")
+        else:
+            st.success("✓ Portfolio weights sum to 100%")
+            
+    else:  # Portfolio Analysis Mode Weights
+        st.info("Using weights from Portfolio Analysis mode (if available)")
+        # Check if portfolio weights exist in session state
+        if hasattr(st.session_state, 'portfolio_weights'):
+            current_portfolio_weights = {symbol.replace('-USD', ''): weight*100 
+                                       for symbol, weight in st.session_state.portfolio_weights.items()}
+        else:
+            st.warning("No Portfolio Analysis weights found. Using equal weight instead.")
+            equal_weight = 100 / len(selected_symbols)
+            for symbol in selected_symbols:
+                current_portfolio_weights[symbol.replace('-USD', '')] = equal_weight
+    
+    # Display current portfolio
+    if current_portfolio_weights:
+        st.write("**Your Current Portfolio:**")
+        current_df = pd.DataFrame({
+            'Asset': list(current_portfolio_weights.keys()),
+            'Current %': [f"{w:.1f}%" for w in current_portfolio_weights.values()]
+        })
+        st.dataframe(current_df, use_container_width=True, hide_index=True)
+    
+    # Get cached data
+    price_data, returns = get_cached_data(
+        selected_symbols, 
+        start_date.strftime('%Y-%m-%d'), 
+        end_date.strftime('%Y-%m-%d')
+    )
+    
+    # LLM API functions
+    def call_openai_api(messages, api_key):
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        data = {
+            "model": "gpt-4",
+            "messages": messages,
+            "max_tokens": 2000,
+            "temperature": 0.3
+        }
+        try:
+            response = requests.post("https://api.openai.com/v1/chat/completions", 
+                                   headers=headers, json=data, timeout=30)
+            if response.status_code == 200:
+                return response.json()["choices"][0]["message"]["content"]
+            else:
+                return f"Error: {response.status_code} - {response.text}"
+        except Exception as e:
+            return f"Error calling OpenAI API: {str(e)}"
+    
+    def call_anthropic_api(message, api_key):
+        headers = {
+            "x-api-key": api_key,
+            "Content-Type": "application/json",
+            "anthropic-version": "2023-06-01"
+        }
+        data = {
+            "model": "claude-3-5-sonnet-20241022",
+            "max_tokens": 2000,
+            "messages": [{"role": "user", "content": message}]
+        }
+        try:
+            response = requests.post("https://api.anthropic.com/v1/messages",
+                                   headers=headers, json=data, timeout=30)
+            if response.status_code == 200:
+                return response.json()["content"][0]["text"]
+            else:
+                return f"Error: {response.status_code} - {response.text}"
+        except Exception as e:
+            return f"Error calling Anthropic API: {str(e)}"
+    
+    def call_gemini_api(message, api_key):
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key={api_key}"
+        headers = {"Content-Type": "application/json"}
+        data = {
+            "contents": [{"parts": [{"text": message}]}],
+            "generationConfig": {
+                "temperature": 0.3,
+                "maxOutputTokens": 2000
+            }
+        }
+        try:
+            response = requests.post(url, headers=headers, json=data, timeout=30)
+            if response.status_code == 200:
+                return response.json()["candidates"][0]["content"]["parts"][0]["text"]
+            else:
+                return f"Error: {response.status_code} - {response.text}"
+        except Exception as e:
+            return f"Error calling Gemini API: {str(e)}"
+    
+    # Advanced ML prediction function for AI analysis
+    def run_ml_predictions_for_ai():
+        ml_results = {}
+        
+        # Feature engineering function (same as ML Predictions mode)
+        def create_features(prices, window=20):
+            features = pd.DataFrame()
+            features['returns'] = prices.pct_change()
+            features['returns_lag1'] = features['returns'].shift(1)
+            features['returns_lag2'] = features['returns'].shift(2)
+            features['ma_5'] = prices.rolling(5).mean() / prices
+            features['ma_10'] = prices.rolling(10).mean() / prices
+            features['ma_20'] = prices.rolling(20).mean() / prices
+            features['volatility_5'] = features['returns'].rolling(5).std()
+            features['volatility_10'] = features['returns'].rolling(10).std()
+            
+            # RSI calculation
+            delta = prices.diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+            rs = gain / loss
+            rsi = 100 - (100 / (1 + rs))
+            features['rsi'] = rsi
+            
+            features['momentum_5'] = prices / prices.shift(5) - 1
+            features['momentum_10'] = prices / prices.shift(10) - 1
+            return features.dropna()
+        
+        # ML prediction function (same as ML Predictions mode)
+        def predict_returns(prices, target_days=7, train_window=90):
+            features = create_features(prices)
+            target = prices.shift(-target_days) / prices - 1
+            valid_idx = features.index.intersection(target.index)
+            X = features.loc[valid_idx].fillna(0)
+            y = target.loc[valid_idx].fillna(0)
+            
+            if len(X) < train_window:
+                return None
+            
+            X_train = X.iloc[-train_window:-target_days] if len(X) > target_days else X.iloc[:-target_days]
+            y_train = y.iloc[-train_window:-target_days] if len(y) > target_days else y.iloc[:-target_days]
+            
+            if len(X_train) < 20:
+                return None
+            
+            scaler = StandardScaler()
+            X_train_scaled = scaler.fit_transform(X_train)
+            
+            models = {
+                'Random Forest': RandomForestRegressor(n_estimators=100, random_state=42, max_depth=10),
+                'Linear Regression': LinearRegression()
+            }
+            
+            predictions = {}
+            for name, model in models.items():
+                try:
+                    model.fit(X_train_scaled, y_train)
+                    last_features = X.iloc[-1:].fillna(0)
+                    last_features_scaled = scaler.transform(last_features)
+                    pred = model.predict(last_features_scaled)[0]
+                    predictions[name] = pred
+                except:
+                    predictions[name] = 0
+            
+            return predictions
+        
+        # Run ML predictions for each asset
+        for symbol in selected_symbols:
+            asset_name = symbol.replace('-USD', '')
+            prices = price_data[symbol]
+            predictions = predict_returns(prices, 7, 90)
+            
+            if predictions:
+                rf_pred = predictions.get('Random Forest', 0)
+                lr_pred = predictions.get('Linear Regression', 0)
+                ensemble_pred = (rf_pred + lr_pred) / 2
+                
+                ml_results[asset_name] = {
+                    "random_forest_7d": f"{rf_pred:.2%}",
+                    "linear_regression_7d": f"{lr_pred:.2%}",
+                    "ensemble_prediction_7d": f"{ensemble_pred:.2%}",
+                    "model_agreement": "High" if abs(rf_pred - lr_pred) < 0.02 else "Medium" if abs(rf_pred - lr_pred) < 0.05 else "Low"
+                }
+        
+        return ml_results
+    
+    # Portfolio optimization results for AI analysis
+    def run_portfolio_optimization_for_ai():
+        optimization_results = {}
+        
+        try:
+            optimizer = PortfolioOptimizer()
+            returns_array = returns.values
+            
+            # Run different optimization methods
+            methods = {
+                "mean_variance": "conservative",
+                "risk_parity": None,
+                "max_sharpe": None
+            }
+            
+            for method, risk_level in methods.items():
+                try:
+                    if method == "mean_variance":
+                        result = optimizer.optimize_portfolio(returns_array, method=method, risk_tolerance=risk_level)
+                    else:
+                        result = optimizer.optimize_portfolio(returns_array, method=method)
+                    
+                    if result.get('success', False):
+                        weights = result['weights']
+                        allocation = {selected_symbols[i].replace('-USD', ''): f"{weights[i]:.1%}" 
+                                    for i in range(len(selected_symbols))}
+                        
+                        optimization_results[method] = {
+                            "allocation": allocation,
+                            "expected_return": f"{result.get('expected_return', 0):.2%}",
+                            "volatility": f"{result.get('volatility', 0):.2%}",
+                            "sharpe_ratio": f"{result.get('sharpe_ratio', 0):.2f}"
+                        }
+                except:
+                    continue
+        except:
+            pass
+        
+        return optimization_results
+    
+    # Generate comprehensive analysis data
+    def generate_analysis_data():
+        analysis_data = {
+            "selected_assets": [symbol.replace('-USD', '') for symbol in selected_symbols],
+            "time_period": f"{start_date} to {end_date}",
+            "market_data": {},
+            "ml_predictions": {},
+            "portfolio_optimization": {},
+            "correlation_analysis": {}
+        }
+        
+        # Market data analysis
+        for symbol in selected_symbols:
+            asset_name = symbol.replace('-USD', '')
+            current_price = price_data[symbol].iloc[-1]
+            start_price = price_data[symbol].iloc[0]
+            total_return = (current_price / start_price - 1) * 100
+            volatility = returns[symbol].std() * np.sqrt(252) * 100
+            
+            analysis_data["market_data"][asset_name] = {
+                "total_return": f"{total_return:.1f}%",
+                "volatility": f"{volatility:.1f}%",
+                "current_price": f"${current_price:.2f}"
+            }
+        
+        # Get ML predictions
+        analysis_data["ml_predictions"] = run_ml_predictions_for_ai()
+        
+        # Get portfolio optimization results
+        analysis_data["portfolio_optimization"] = run_portfolio_optimization_for_ai()
+        
+        # Correlation analysis
+        try:
+            corr_matrix = returns.corr()
+            avg_correlation = corr_matrix.values[np.triu_indices_from(corr_matrix.values, k=1)].mean()
+            
+            analysis_data["correlation_analysis"] = {
+                "average_correlation": f"{avg_correlation:.2f}",
+                "diversification_potential": "Low" if avg_correlation > 0.7 else "Medium" if avg_correlation > 0.3 else "High"
+            }
+        except:
+            pass
+        
+        return analysis_data
+    
+    # Generate AI analysis
+    if st.button("Get AI Investment Advice", type="primary"):
+        with st.spinner("Generating AI analysis..."):
+            analysis_data = generate_analysis_data()
+            
+            # Create structured prompt for AI
+            prompt = f"""
+            As a crypto portfolio advisor, analyze the comprehensive data and provide a structured response in JSON format:
+            
+            **Portfolio Configuration:**
+            - Selected Assets: {', '.join(analysis_data['selected_assets'])}
+            - Risk Tolerance: {risk_tolerance}
+            - Investment Horizon: {investment_horizon}
+            - Analysis Period: {analysis_data['time_period']}
+            
+            **Market Performance Data:**
+            {json.dumps(analysis_data['market_data'], indent=2)}
+            
+            **Machine Learning Predictions (7-day forecasts):**
+            {json.dumps(analysis_data['ml_predictions'], indent=2)}
+            
+            **Portfolio Optimization Results (Multiple Methods):**
+            {json.dumps(analysis_data['portfolio_optimization'], indent=2)}
+            
+            **Correlation Analysis:**
+            {json.dumps(analysis_data['correlation_analysis'], indent=2)}
+            
+            **Current Portfolio (User Defined):**
+            {json.dumps(current_portfolio_weights, indent=2)}
+            
+            **Instructions:**
+            Analyze the data and recommend a target portfolio allocation for {investment_horizon}. Use the user's current portfolio above as starting point and provide rebalancing plan.
+            
+            **Required Response Format (JSON only):**
+            {{
+                "current_portfolio": {json.dumps(current_portfolio_weights)},
+                "recommended_portfolio": {{
+                    "BTC": 35,
+                    "ETH": 25,
+                    "provide_percentages_for_all_selected_assets": "that sum to 100"
+                }},
+                "rebalancing_plan": {{
+                    "portfolio_value": 100000,
+                    "timeframe": "{investment_horizon}",
+                    "actions": [
+                        {{"asset": "BTC", "action": "BUY", "amount": 8500, "from_percent": 20, "to_percent": 28.5, "reason": "Strong momentum"}},
+                        {{"asset": "ETH", "action": "SELL", "amount": 3000, "from_percent": 20, "to_percent": 17, "reason": "High volatility"}}
+                    ]
+                }},
+                "portfolio_metrics": {{
+                    "expected_annual_return": "15.2%",
+                    "expected_volatility": "28.5%",
+                    "sharpe_ratio": 0.53,
+                    "max_drawdown_estimate": "45%"
+                }},
+                "implementation": {{
+                    "timeline": "Rebalance over 2-3 trading days",
+                    "order_strategy": "Use limit orders, place 1-2% away from market",
+                    "risk_controls": "Set stop losses at 15% below entry for each position"
+                }}
+            }}
+            
+            Provide ONLY the JSON response. Ensure all selected assets are included with realistic allocations that sum to 100%.
+            """
+            
+            # Call selected LLM API
+            try:
+                if "OpenAI" in llm_provider:
+                    messages = [
+                        {"role": "system", "content": "You are a professional cryptocurrency investment advisor with expertise in portfolio analysis and risk management."},
+                        {"role": "user", "content": prompt}
+                    ]
+                    ai_response = call_openai_api(messages, api_key)
+                elif "Anthropic" in llm_provider:
+                    ai_response = call_anthropic_api(prompt, api_key)
+                elif "Google" in llm_provider:
+                    ai_response = call_gemini_api(prompt, api_key)
+                else:
+                    ai_response = "Error: Invalid LLM provider selected"
+                
+                # Display AI analysis
+                st.subheader("AI Investment Analysis")
+                
+                if ai_response.startswith("Error"):
+                    st.error(ai_response)
+                    st.info("Please check your API key and try again.")
+                else:
+                    try:
+                        # Parse JSON response
+                        import re
+                        # Extract JSON from response (in case there's extra text)
+                        json_match = re.search(r'\{.*\}', ai_response, re.DOTALL)
+                        if json_match:
+                            json_str = json_match.group(0)
+                            ai_data = json.loads(json_str)
+                            
+                            # 1. Portfolio Comparison
+                            col1, col2 = st.columns(2)
+                            
+                            with col1:
+                                st.subheader("Current Portfolio")
+                                if "current_portfolio" in ai_data:
+                                    current_data = ai_data["current_portfolio"]
+                                    assets = list(current_data.keys())
+                                    weights = [float(w) for w in current_data.values()]
+                                    
+                                    fig_current = px.pie(
+                                        values=weights,
+                                        names=assets,
+                                        title="Current Allocation (Equal Weight)",
+                                        color_discrete_sequence=['#F7931A', '#627EEA', '#F3BA2F', '#00AAE4', '#0033AD', '#9945FF']
+                                    )
+                                    fig_current.update_traces(textposition='inside', textinfo='percent+label')
+                                    fig_current.update_layout(height=350, template='plotly_white')
+                                    st.plotly_chart(fig_current, use_container_width=True)
+                            
+                            with col2:
+                                st.subheader("AI Recommended Portfolio")
+                                if "recommended_portfolio" in ai_data:
+                                    rec_data = ai_data["recommended_portfolio"]
+                                    assets = list(rec_data.keys())
+                                    weights = [float(w) for w in rec_data.values()]
+                                    
+                                    fig_recommended = px.pie(
+                                        values=weights,
+                                        names=assets,
+                                        title="Recommended Allocation",
+                                        color_discrete_sequence=['#F7931A', '#627EEA', '#F3BA2F', '#00AAE4', '#0033AD', '#9945FF']
+                                    )
+                                    fig_recommended.update_traces(textposition='inside', textinfo='percent+label')
+                                    fig_recommended.update_layout(height=350, template='plotly_white')
+                                    st.plotly_chart(fig_recommended, use_container_width=True)
+                            
+                            # 2. Rebalancing Plan
+                            st.subheader("Precise Rebalancing Plan")
+                            
+                            if "rebalancing_plan" in ai_data:
+                                plan = ai_data["rebalancing_plan"]
+                                
+                                # Portfolio details
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    portfolio_val = plan.get("portfolio_value", 100000)
+                                    st.metric("Portfolio Value", f"${portfolio_val:,}")
+                                with col2:
+                                    timeframe = plan.get("timeframe", "Not specified")
+                                    st.metric("Timeframe", timeframe)
+                                
+                                # Rebalancing actions
+                                if "actions" in plan and plan["actions"]:
+                                    st.markdown("**Required Trades:**")
+                                    
+                                    for action in plan["actions"]:
+                                        asset = action.get("asset", "")
+                                        action_type = action.get("action", "")
+                                        amount = action.get("amount", 0)
+                                        from_pct = action.get("from_percent", 0)
+                                        to_pct = action.get("to_percent", 0)
+                                        reason = action.get("reason", "")
+                                        
+                                        color = "green" if action_type == "BUY" else "red" if action_type == "SELL" else "blue"
+                                        arrow = "↑" if action_type == "BUY" else "↓" if action_type == "SELL" else "→"
+                                        
+                                        st.markdown(f"""
+                                        <div style='border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 8px; background-color: #f8f9fa;'>
+                                        <div style='display: flex; justify-content: space-between; align-items: center;'>
+                                        <div>
+                                        <strong style='font-size: 18px;'>{asset}</strong>: 
+                                        <span style='color:{color}; font-weight:bold; font-size: 16px;'>{action_type} ${amount:,}</span>
+                                        </div>
+                                        <div style='text-align: right;'>
+                                        <span style='font-size: 24px;'>{arrow}</span>
+                                        </div>
+                                        </div>
+                                        <div style='margin-top: 8px;'>
+                                        <span style='background-color: #e9ecef; padding: 2px 6px; border-radius: 4px; font-size: 12px;'>
+                                        {from_pct}% → {to_pct}%
+                                        </span>
+                                        <br><small style='color: #6c757d; margin-top: 4px; display: block;'>{reason}</small>
+                                        </div>
+                                        </div>
+                                        """, unsafe_allow_html=True)
+                            
+                            # 3. Expected Portfolio Performance
+                            st.subheader("Expected Portfolio Performance")
+                            
+                            if "portfolio_metrics" in ai_data:
+                                metrics = ai_data["portfolio_metrics"]
+                                
+                                col1, col2, col3, col4 = st.columns(4)
+                                
+                                with col1:
+                                    return_val = metrics.get("expected_annual_return", "N/A")
+                                    st.metric("Expected Return", return_val, delta="Annual")
+                                
+                                with col2:
+                                    vol_val = metrics.get("expected_volatility", "N/A")
+                                    st.metric("Expected Volatility", vol_val, delta="Risk Level")
+                                
+                                with col3:
+                                    sharpe_val = metrics.get("sharpe_ratio", "N/A")
+                                    st.metric("Sharpe Ratio", f"{sharpe_val}" if isinstance(sharpe_val, (int, float)) else sharpe_val)
+                                
+                                with col4:
+                                    drawdown_val = metrics.get("max_drawdown_estimate", "N/A")
+                                    st.metric("Max Drawdown", drawdown_val, delta="Worst Case")
+                            
+                            # 4. Implementation Guide
+                            st.subheader("Implementation Guide")
+                            
+                            if "implementation" in ai_data:
+                                impl = ai_data["implementation"]
+                                
+                                col1, col2 = st.columns(2)
+                                
+                                with col1:
+                                    st.info(f"**Timeline:** {impl.get('timeline', 'Not specified')}")
+                                    st.info(f"**Order Strategy:** {impl.get('order_strategy', 'Market orders')}")
+                                
+                                with col2:
+                                    st.warning(f"**Risk Controls:** {impl.get('risk_controls', 'Set appropriate stop losses')}")
+                                    st.success("**Final Step:** Monitor positions daily and adjust as market conditions change")
+                        
+                        else:
+                            st.error("Could not parse AI response as JSON. Raw response:")
+                            st.text(ai_response)
+                            
+                    except json.JSONDecodeError as e:
+                        st.error("Failed to parse AI response as JSON. Raw response:")
+                        st.text(ai_response)
+                        st.error(f"JSON Error: {str(e)}")
+                    except Exception as e:
+                        st.error(f"Error processing AI response: {str(e)}")
+                        st.text(ai_response)
+            
+            except Exception as e:
+                st.error(f"Error generating AI analysis: {str(e)}")
+    
+    # Add expandable section for data sources
+    with st.expander("View Analysis Data Sources"):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write("**Market Performance Data**")
+            if 'analysis_data' in locals():
+                market_source_df = pd.DataFrame(analysis_data["market_data"]).T
+                st.dataframe(market_source_df, use_container_width=True)
+        
+        with col2:
+            st.write("**Technical Indicators**")
+            if 'analysis_data' in locals() and analysis_data["ml_predictions"]:
+                tech_source_df = pd.DataFrame(analysis_data["ml_predictions"]).T
+                st.dataframe(tech_source_df, use_container_width=True)
+            else:
+                st.write("No technical data available")
+    
+    # Portfolio analysis section
+    st.subheader("Current Portfolio Overview")
+    
+    # Display market metrics
+    market_data = []
+    for symbol in selected_symbols:
+        asset_name = symbol.replace('-USD', '')
+        current_price = price_data[symbol].iloc[-1]
+        start_price = price_data[symbol].iloc[0]
+        total_return = (current_price / start_price - 1) * 100
+        volatility = returns[symbol].std() * np.sqrt(252) * 100
+        
+        # Risk assessment
+        if volatility > 100:
+            risk_level = "Very High"
+        elif volatility > 70:
+            risk_level = "High"
+        elif volatility > 40:
+            risk_level = "Medium"
+        else:
+            risk_level = "Low"
+        
+        market_data.append({
+            'Asset': asset_name,
+            'Current Price': f"${current_price:.2f}",
+            'Total Return': f"{total_return:.1f}%",
+            'Volatility': f"{volatility:.1f}%",
+            'Risk Level': risk_level
+        })
+    
+    market_df = pd.DataFrame(market_data)
+    st.dataframe(market_df, use_container_width=True, hide_index=True)
+    
+    # Important disclaimers
+    st.subheader("Important Disclaimers")
+    st.error("""
+    **AI Investment Advice Disclaimer:**
+    - AI-generated advice is for informational purposes only
+    - Not personalized financial advice - consult qualified professionals
+    - AI models may have biases or limitations in analysis
+    - Cryptocurrency investments are highly risky and volatile
+    - Past performance does not guarantee future results
+    - Never invest more than you can afford to lose
+    - Always do your own research before making investment decisions
     """)
 
 else:  # Portfolio Analysis
