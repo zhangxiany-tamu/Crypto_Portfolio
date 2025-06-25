@@ -4,7 +4,7 @@ import streamlit as st
 st.set_page_config(
     page_title="Crypto Portfolio Optimizer",
     page_icon="₿",
-    layout="wide",
+    layout="centered",
     initial_sidebar_state="expanded"
 )
 
@@ -86,96 +86,40 @@ def apply_theme_css(theme):
         box-sizing: border-box;
     }
     
-    /* Force stable sidebar dimensions - prevent Streamlit JS override */
-    .stSidebar, 
-    [data-testid="stSidebar"],
-    .css-1d391kg,
-    section[data-testid="stSidebar"] {
+    /* Simple, stable sidebar styling */
+    [data-testid="stSidebar"] {
         background: var(--cb-card-bg) !important;
         border-right: 1px solid var(--cb-border) !important;
         box-shadow: var(--cb-shadow);
-        width: min(300px, 25vw) !important;
-        min-width: min(250px, 20vw) !important;
-        max-width: min(350px, 30vw) !important;
-        flex-shrink: 0 !important;
-        position: relative !important;
     }
     
-    .stSidebar .stSidebarContent {
+    [data-testid="stSidebar"] > div {
         background: var(--cb-card-bg) !important;
-        width: 100% !important;
-        padding: clamp(0.5rem, 2vw, 1rem) !important;
-        box-sizing: border-box !important;
+        padding: 1rem !important;
     }
     
-    .stSidebar label {
+    [data-testid="stSidebar"] label {
         color: var(--cb-text-primary) !important;
         font-weight: 500 !important;
-        font-size: clamp(0.7rem, 1.5vw, 0.875rem) !important;
-        margin-bottom: 0.4rem !important;
+        font-size: 0.875rem !important;
     }
     
-    .stSidebar h1, .stSidebar h2, .stSidebar h3 {
+    [data-testid="stSidebar"] h1, 
+    [data-testid="stSidebar"] h2, 
+    [data-testid="stSidebar"] h3 {
         color: var(--cb-text-primary) !important;
         font-weight: 600 !important;
-        font-size: clamp(0.9rem, 2vw, 1.2rem) !important;
-        margin-bottom: 0.5rem !important;
     }
     
-    .stSidebar p {
+    [data-testid="stSidebar"] p {
         color: var(--cb-text-secondary) !important;
-        font-size: clamp(0.7rem, 1.4vw, 0.85rem) !important;
+        font-size: 0.875rem !important;
     }
     
-    /* Adaptive main content area */
-    .main {
-        flex: 1 !important;
-        overflow-x: hidden !important;
-        min-width: 0 !important;
-        width: auto !important;
-    }
-    
+    /* Let Streamlit handle main content layout naturally */
     .main .block-container {
-        padding: clamp(0.5rem, 2vw, 2rem) clamp(1rem, 3vw, 2rem);
-        max-width: none !important;
-        width: 100% !important;
-        box-sizing: border-box !important;
-    }
-    
-    /* Ensure proper flexbox layout for the entire app */
-    .stApp {
-        display: flex !important;
-        flex-direction: row !important;
-        min-height: 100vh !important;
-    }
-    
-    /* Responsive breakpoints for extreme cases */
-    @media screen and (max-width: 768px) {
-        .stSidebar {
-            width: 35vw !important;
-            min-width: 250px !important;
-            max-width: 280px !important;
-        }
-        
-        .main .block-container {
-            padding: 0.75rem !important;
-        }
-        
-        .stSidebar label, .stSidebar p {
-            font-size: 0.75rem !important;
-        }
-    }
-    
-    @media screen and (min-width: 1920px) {
-        .stSidebar {
-            width: 320px !important;
-            max-width: 350px !important;
-        }
-        
-        .main .block-container {
-            max-width: 1400px !important;
-            margin: 0 auto !important;
-        }
+        max-width: 1200px !important;
+        padding: 1rem 2rem !important;
     }
     
     /* Coinbase-style buttons */
@@ -400,55 +344,14 @@ def apply_theme_css(theme):
         color: var(--cb-blue) !important;
     }
     
-    /* Prevent any dynamic width changes */
-    * {
-        transition: width 0s !important;
+    
+    /* Override any dynamic width changes from Streamlit */
+    [data-testid="stSidebar"] {
+        width: 21rem !important;
+        min-width: 21rem !important;
+        max-width: 21rem !important;
     }
 </style>
-
-<script>
-    // Prevent Streamlit from dynamically changing sidebar width
-    function enforceLayout() {
-        const sidebar = document.querySelector('[data-testid="stSidebar"]') || 
-                       document.querySelector('.stSidebar') ||
-                       document.querySelector('.css-1d391kg');
-        
-        if (sidebar) {
-            const vw = window.innerWidth;
-            const targetWidth = Math.min(300, vw * 0.25);
-            const minWidth = Math.min(250, vw * 0.20);
-            const maxWidth = Math.min(350, vw * 0.30);
-            
-            sidebar.style.setProperty('width', `${targetWidth}px`, 'important');
-            sidebar.style.setProperty('min-width', `${minWidth}px`, 'important');
-            sidebar.style.setProperty('max-width', `${maxWidth}px`, 'important');
-            sidebar.style.setProperty('flex-shrink', '0', 'important');
-        }
-        
-        const main = document.querySelector('.main');
-        if (main) {
-            main.style.setProperty('flex', '1', 'important');
-            main.style.setProperty('overflow-x', 'hidden', 'important');
-            main.style.setProperty('min-width', '0', 'important');
-        }
-    }
-    
-    // Run on load and any DOM changes
-    document.addEventListener('DOMContentLoaded', enforceLayout);
-    window.addEventListener('resize', enforceLayout);
-    
-    // Observer to catch Streamlit's dynamic changes
-    const observer = new MutationObserver(enforceLayout);
-    observer.observe(document.body, { 
-        childList: true, 
-        subtree: true, 
-        attributes: true, 
-        attributeFilter: ['style', 'class'] 
-    });
-    
-    // Periodic enforcement as backup
-    setInterval(enforceLayout, 100);
-</script>
 """
     else:  # dark theme (Coinbase-inspired)
         return """
