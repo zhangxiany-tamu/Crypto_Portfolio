@@ -86,42 +86,92 @@ def apply_theme_css(theme):
         box-sizing: border-box;
     }
     
-    /* Stable sidebar styling */
+    /* Adaptive sidebar styling - uses viewport width percentages */
     .stSidebar {
         background: var(--cb-card-bg) !important;
         border-right: 1px solid var(--cb-border) !important;
         box-shadow: var(--cb-shadow);
-        width: 300px !important;
-        min-width: 300px !important;
-        max-width: 300px !important;
+        width: min(300px, 25vw) !important;
+        min-width: min(250px, 20vw) !important;
+        max-width: min(350px, 30vw) !important;
+        flex-shrink: 0 !important;
     }
     
     .stSidebar .stSidebarContent {
         background: var(--cb-card-bg) !important;
         width: 100% !important;
+        padding: clamp(0.5rem, 2vw, 1rem) !important;
+        box-sizing: border-box !important;
     }
     
     .stSidebar label {
         color: var(--cb-text-primary) !important;
         font-weight: 500 !important;
-        font-size: 0.875rem !important;
-        margin-bottom: 0.5rem !important;
+        font-size: clamp(0.7rem, 1.5vw, 0.875rem) !important;
+        margin-bottom: 0.4rem !important;
     }
     
     .stSidebar h1, .stSidebar h2, .stSidebar h3 {
         color: var(--cb-text-primary) !important;
         font-weight: 600 !important;
+        font-size: clamp(0.9rem, 2vw, 1.2rem) !important;
+        margin-bottom: 0.5rem !important;
     }
     
     .stSidebar p {
         color: var(--cb-text-secondary) !important;
-        font-size: 0.875rem !important;
+        font-size: clamp(0.7rem, 1.4vw, 0.85rem) !important;
     }
     
-    /* Prevent content overflow */
+    /* Adaptive main content area */
     .main {
-        overflow-x: auto;
-        width: 100%;
+        flex: 1 !important;
+        overflow-x: hidden !important;
+        min-width: 0 !important;
+        width: auto !important;
+    }
+    
+    .main .block-container {
+        padding: clamp(0.5rem, 2vw, 2rem) clamp(1rem, 3vw, 2rem);
+        max-width: none !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+    
+    /* Ensure proper flexbox layout for the entire app */
+    .stApp {
+        display: flex !important;
+        flex-direction: row !important;
+        min-height: 100vh !important;
+    }
+    
+    /* Responsive breakpoints for extreme cases */
+    @media screen and (max-width: 768px) {
+        .stSidebar {
+            width: 35vw !important;
+            min-width: 250px !important;
+            max-width: 280px !important;
+        }
+        
+        .main .block-container {
+            padding: 0.75rem !important;
+        }
+        
+        .stSidebar label, .stSidebar p {
+            font-size: 0.75rem !important;
+        }
+    }
+    
+    @media screen and (min-width: 1920px) {
+        .stSidebar {
+            width: 320px !important;
+            max-width: 350px !important;
+        }
+        
+        .main .block-container {
+            max-width: 1400px !important;
+            margin: 0 auto !important;
+        }
     }
     
     /* Coinbase-style buttons */
