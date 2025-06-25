@@ -1013,9 +1013,11 @@ if mode == "Portfolio Optimization":
             allocation_df = pd.DataFrame(allocation_data)
             allocation_df = allocation_df.sort_values('Weight', ascending=False)
             
+            # Set Asset as index and display table without separate Asset column
+            allocation_display = allocation_df.set_index('Asset')[['Weight (%)', 'Risk Contrib (%)']]
+            
             # Display allocation table
-            st.dataframe(allocation_df[['Asset', 'Weight (%)', 'Risk Contrib (%)']], 
-                        use_container_width=True)
+            st.dataframe(allocation_display, use_container_width=True)
             
             # Portfolio allocation pie chart
             col1, col2 = st.columns(2)
