@@ -766,9 +766,17 @@ end_date = st.sidebar.date_input("End Date", datetime.now() - timedelta(days=1))
 start_date = st.sidebar.date_input("Start Date", end_date - timedelta(days=365))
 
 crypto_symbols = [
-    'BTC-USD', 'ETH-USD', 'BNB-USD', 'XRP-USD', 'ADA-USD', 
-    'SOL-USD', 'MATIC-USD', 'DOT-USD', 'AVAX-USD', 'LINK-USD',
-    'UNI-USD', 'LTC-USD', 'BCH-USD', 'ATOM-USD', 'ALGO-USD'
+    # Top 10 by market cap
+    'BTC-USD', 'ETH-USD', 'XRP-USD', 'BNB-USD', 'SOL-USD',
+    'DOGE-USD', 'ADA-USD', 'TRX-USD', 'SHIB-USD', 'AVAX-USD',
+    
+    # Major DeFi and Layer 1/2
+    'LINK-USD', 'DOT-USD', 'UNI-USD', 'AAVE-USD', 'MATIC-USD',
+    'NEAR-USD', 'ICP-USD', 'APT-USD', 'SUI-USD', 'ATOM-USD',
+    
+    # Established cryptocurrencies
+    'LTC-USD', 'BCH-USD', 'XLM-USD', 'XMR-USD', 'ETC-USD',
+    'HBAR-USD', 'TON-USD', 'ALGO-USD', 'VET-USD', 'FTM-USD'
 ]
 selected_symbols = st.sidebar.multiselect(
     "Select Cryptocurrencies",
