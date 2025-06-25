@@ -86,8 +86,11 @@ def apply_theme_css(theme):
         box-sizing: border-box;
     }
     
-    /* Adaptive sidebar styling - uses viewport width percentages */
-    .stSidebar {
+    /* Force stable sidebar dimensions - prevent Streamlit JS override */
+    .stSidebar, 
+    [data-testid="stSidebar"],
+    .css-1d391kg,
+    section[data-testid="stSidebar"] {
         background: var(--cb-card-bg) !important;
         border-right: 1px solid var(--cb-border) !important;
         box-shadow: var(--cb-shadow);
@@ -95,6 +98,7 @@ def apply_theme_css(theme):
         min-width: min(250px, 20vw) !important;
         max-width: min(350px, 30vw) !important;
         flex-shrink: 0 !important;
+        position: relative !important;
     }
     
     .stSidebar .stSidebarContent {
@@ -395,7 +399,56 @@ def apply_theme_css(theme):
         border-radius: var(--cb-radius) !important;
         color: var(--cb-blue) !important;
     }
+    
+    /* Prevent any dynamic width changes */
+    * {
+        transition: width 0s !important;
+    }
 </style>
+
+<script>
+    // Prevent Streamlit from dynamically changing sidebar width
+    function enforceLayout() {
+        const sidebar = document.querySelector('[data-testid="stSidebar"]') || 
+                       document.querySelector('.stSidebar') ||
+                       document.querySelector('.css-1d391kg');
+        
+        if (sidebar) {
+            const vw = window.innerWidth;
+            const targetWidth = Math.min(300, vw * 0.25);
+            const minWidth = Math.min(250, vw * 0.20);
+            const maxWidth = Math.min(350, vw * 0.30);
+            
+            sidebar.style.setProperty('width', `${targetWidth}px`, 'important');
+            sidebar.style.setProperty('min-width', `${minWidth}px`, 'important');
+            sidebar.style.setProperty('max-width', `${maxWidth}px`, 'important');
+            sidebar.style.setProperty('flex-shrink', '0', 'important');
+        }
+        
+        const main = document.querySelector('.main');
+        if (main) {
+            main.style.setProperty('flex', '1', 'important');
+            main.style.setProperty('overflow-x', 'hidden', 'important');
+            main.style.setProperty('min-width', '0', 'important');
+        }
+    }
+    
+    // Run on load and any DOM changes
+    document.addEventListener('DOMContentLoaded', enforceLayout);
+    window.addEventListener('resize', enforceLayout);
+    
+    // Observer to catch Streamlit's dynamic changes
+    const observer = new MutationObserver(enforceLayout);
+    observer.observe(document.body, { 
+        childList: true, 
+        subtree: true, 
+        attributes: true, 
+        attributeFilter: ['style', 'class'] 
+    });
+    
+    // Periodic enforcement as backup
+    setInterval(enforceLayout, 100);
+</script>
 """
     else:  # dark theme (Coinbase-inspired)
         return """
