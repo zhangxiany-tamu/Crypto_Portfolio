@@ -345,11 +345,73 @@ def apply_theme_css(theme):
     }
     
     
-    /* Override any dynamic width changes from Streamlit */
+    /* Responsive sidebar with proper collapse behavior */
     [data-testid="stSidebar"] {
         width: 21rem !important;
         min-width: 21rem !important;
         max-width: 21rem !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    /* When sidebar is collapsed (Streamlit adds this class) */
+    [data-testid="stSidebar"][aria-expanded="false"],
+    [data-testid="stSidebar"].collapsed {
+        width: 0 !important;
+        min-width: 0 !important;
+        max-width: 0 !important;
+        overflow: hidden !important;
+        border: none !important;
+    }
+    
+    /* Hide content when collapsed */
+    [data-testid="stSidebar"][aria-expanded="false"] > div,
+    [data-testid="stSidebar"].collapsed > div {
+        display: none !important;
+    }
+    
+    /* Make main content adaptive to sidebar state */
+    .main {
+        width: calc(100% - 21rem) !important;
+        margin-left: 21rem !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    /* When sidebar is collapsed, main takes full width */
+    [data-testid="stSidebar"][aria-expanded="false"] ~ .main,
+    [data-testid="stSidebar"].collapsed ~ .main {
+        width: 100% !important;
+        margin-left: 0 !important;
+    }
+    
+    /* Responsive breakpoints for better mobile experience */
+    @media screen and (max-width: 1024px) {
+        [data-testid="stSidebar"] {
+            width: 18rem !important;
+            min-width: 18rem !important;
+            max-width: 18rem !important;
+        }
+        
+        .main {
+            width: calc(100% - 18rem) !important;
+            margin-left: 18rem !important;
+        }
+    }
+    
+    @media screen and (max-width: 768px) {
+        [data-testid="stSidebar"] {
+            width: 16rem !important;
+            min-width: 16rem !important;
+            max-width: 16rem !important;
+        }
+        
+        .main {
+            width: calc(100% - 16rem) !important;
+            margin-left: 16rem !important;
+        }
+        
+        .main .block-container {
+            padding: 1rem !important;
+        }
     }
 </style>
 """
