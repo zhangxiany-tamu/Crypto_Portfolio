@@ -2383,6 +2383,73 @@ elif mode == "AI Investment Advisor":
         ["OpenAI (GPT-4)", "Anthropic (Claude)", "Google (Gemini)"]
     )
     
+    # API Key validation functions
+    def validate_openai_key(api_key):
+        """Validate OpenAI API key"""
+        if not api_key:
+            return None, None
+        
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        try:
+            response = requests.get("https://api.openai.com/v1/models", headers=headers, timeout=10)
+            if response.status_code == 200:
+                return True, "✅ Valid OpenAI API key"
+            else:
+                return False, "❌ Invalid OpenAI API key"
+        except Exception as e:
+            return False, f"❌ Error validating OpenAI key: Connection failed"
+    
+    def validate_anthropic_key(api_key):
+        """Validate Anthropic API key"""
+        if not api_key:
+            return None, None
+        
+        headers = {
+            "x-api-key": api_key,
+            "Content-Type": "application/json",
+            "anthropic-version": "2023-06-01"
+        }
+        data = {
+            "model": "claude-3-5-sonnet-20241022",
+            "max_tokens": 10,
+            "messages": [{"role": "user", "content": "test"}]
+        }
+        try:
+            response = requests.post("https://api.anthropic.com/v1/messages", 
+                                   headers=headers, json=data, timeout=10)
+            if response.status_code == 200:
+                return True, "✅ Valid Anthropic API key"
+            else:
+                return False, "❌ Invalid Anthropic API key"
+        except Exception as e:
+            return False, f"❌ Error validating Anthropic key: Connection failed"
+    
+    def validate_google_key(api_key):
+        """Validate Google API key"""
+        if not api_key:
+            return None, None
+        
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key={api_key}"
+        headers = {"Content-Type": "application/json"}
+        data = {
+            "contents": [{"parts": [{"text": "test"}]}],
+            "generationConfig": {
+                "temperature": 0.3,
+                "maxOutputTokens": 10
+            }
+        }
+        try:
+            response = requests.post(url, headers=headers, json=data, timeout=10)
+            if response.status_code == 200:
+                return True, "✅ Valid Google API key"
+            else:
+                return False, "❌ Invalid Google API key"
+        except Exception as e:
+            return False, f"❌ Error validating Google key: Connection failed"
+
     # API Key input
     api_key = st.sidebar.text_input(
         "API Key",
@@ -2390,6 +2457,27 @@ elif mode == "AI Investment Advisor":
         help="Enter your API key for the selected provider"
     )
     
+    # Real-time API key validation
+    if api_key:
+        validation_placeholder = st.sidebar.empty()
+        
+        # Validate based on selected provider
+        if llm_provider == "OpenAI (GPT-4)":
+            is_valid, message = validate_openai_key(api_key)
+        elif llm_provider == "Anthropic (Claude)":
+            is_valid, message = validate_anthropic_key(api_key)
+        else:  # Google (Gemini)
+            is_valid, message = validate_google_key(api_key)
+        
+        # Display validation result
+        if is_valid is True:
+            validation_placeholder.success(message)
+        elif is_valid is False:
+            validation_placeholder.error(message)
+        # If is_valid is None, show nothing (empty key)
+    
+    # Check if we should stop (no key or invalid key)
+    should_stop = False
     if not api_key:
         st.warning("Please enter your API key in the sidebar to get AI investment advice.")
         st.info("""
@@ -2398,6 +2486,21 @@ elif mode == "AI Investment Advisor":
         - **Anthropic**: Visit https://console.anthropic.com/
         - **Google**: Visit https://ai.google.dev/
         """)
+        should_stop = True
+    elif api_key:
+        # Check validation result
+        if llm_provider == "OpenAI (GPT-4)":
+            is_valid, _ = validate_openai_key(api_key)
+        elif llm_provider == "Anthropic (Claude)":
+            is_valid, _ = validate_anthropic_key(api_key)
+        else:  # Google (Gemini)
+            is_valid, _ = validate_google_key(api_key)
+        
+        if is_valid is False:
+            st.error("Please enter a valid API key to continue.")
+            should_stop = True
+    
+    if should_stop:
         st.stop()
     
     # Risk tolerance for AI analysis
