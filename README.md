@@ -13,7 +13,11 @@ A web application for cryptocurrency portfolio optimization and analysis with ma
 
 ## Quick Start
 
-### Installation
+### Live Demo
+
+🌐 **[Try the live application](https://zhangxianyang-crypto-portfolio.share.connect.posit.cloud/)**
+
+### Local Installation
 
 ```bash
 git clone https://github.com/zhangxiany-tamu/Crypto_Portfolio.git
@@ -21,7 +25,7 @@ cd Crypto_Portfolio
 python -m pip install -r requirements.txt
 ```
 
-### Run the Application
+### Run Locally
 
 ```bash
 cd frontend
