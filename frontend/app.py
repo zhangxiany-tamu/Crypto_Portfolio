@@ -13,7 +13,7 @@ import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 from datetime import datetime, timedelta
-from yahooquery import Ticker
+# Removed yahooquery import - using enhanced crypto loader instead
 import sys
 import os
 from sklearn.ensemble import RandomForestRegressor
@@ -28,7 +28,7 @@ warnings.filterwarnings('ignore')
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from portfolio_optimizer import PortfolioOptimizer
-from robust_data_fetcher import RobustDataFetcher
+from enhanced_crypto_loader import EnhancedCryptoLoader
 
 # Initialize session state for theme - default to light mode
 if 'theme' not in st.session_state:
@@ -889,10 +889,13 @@ observer.observe(document.body, { childList: true, subtree: true });
 # Apply the CSS based on current theme
 st.markdown(apply_theme_css(st.session_state.theme), unsafe_allow_html=True)
 
-# Initialize robust data manager
+# Initialize enhanced crypto loader (with hybrid data fetching)
 @st.cache_resource
 def get_data_manager():
-    return RobustDataFetcher()
+    # Use parent directory for data path since frontend is in subdirectory
+    parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    data_dir = os.path.join(parent_dir, "data")
+    return EnhancedCryptoLoader(data_dir=data_dir)
 
 data_manager = get_data_manager()
 
@@ -918,7 +921,7 @@ st.sidebar.title("Portfolio Configuration")
 # Mode selection
 mode = st.sidebar.selectbox(
     "Select Mode",
-    ["Portfolio Analysis", "Portfolio Optimization", "Sample Backtest", "Market Insights", "ML Predictions", "AI Investment Advisor"]
+    ["Market Insights", "Portfolio Analysis & Backtest", "Portfolio Optimization", "ML Predictions", "AI Investment Advisor"]
 )
 
 # Common parameters
@@ -926,23 +929,37 @@ st.sidebar.subheader("Time Period")
 end_date = st.sidebar.date_input("End Date", datetime.now() - timedelta(days=1))
 start_date = st.sidebar.date_input("Start Date", end_date - timedelta(days=365))
 
-crypto_symbols = [
-    # Top 10 by market cap
-    'BTC-USD', 'ETH-USD', 'XRP-USD', 'BNB-USD', 'SOL-USD',
-    'DOGE-USD', 'ADA-USD', 'TRX-USD', 'SHIB-USD', 'AVAX-USD',
-    
-    # Major DeFi and Layer 1/2
-    'LINK-USD', 'DOT-USD', 'UNI-USD', 'AAVE-USD', 'MATIC-USD',
-    'NEAR-USD', 'ICP-USD', 'APT-USD', 'SUI-USD', 'ATOM-USD',
-    
-    # Established cryptocurrencies
-    'LTC-USD', 'BCH-USD', 'XLM-USD', 'XMR-USD', 'ETC-USD',
-    'HBAR-USD', 'TON-USD', 'ALGO-USD', 'VET-USD', 'FTM-USD'
-]
+# Load all available cryptocurrencies from the enhanced database
+@st.cache_data(ttl=3600)  # Cache for 1 hour
+def load_available_cryptocurrencies():
+    """Load all available cryptocurrencies from the enhanced database"""
+    try:
+        # Use parent directory for data path since frontend is in subdirectory
+        parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        data_dir = os.path.join(parent_dir, "data")
+        loader = EnhancedCryptoLoader(data_dir=data_dir)
+        return loader.get_available_symbols()
+    except Exception as e:
+        st.error(f"Error loading cryptocurrency database: {e}")
+        # Fallback to a smaller list if database is not available
+        return [
+            'BTC-USD', 'ETH-USD', 'XRP-USD', 'BNB-USD', 'SOL-USD',
+            'DOGE-USD', 'ADA-USD', 'TRX-USD', 'SHIB-USD', 'AVAX-USD',
+            'LINK-USD', 'DOT-USD', 'UNI-USD', 'AAVE-USD', 'MATIC-USD',
+            'NEAR-USD', 'ICP-USD', 'APT-USD', 'SUI-USD', 'ATOM-USD'
+        ]
+
+crypto_symbols = load_available_cryptocurrencies()
+
+# Show number of available cryptocurrencies
+st.sidebar.write(f"**{len(crypto_symbols)} cryptocurrencies available**")
+st.sidebar.write("*From extended database with 5+ years of data*")
+
 selected_symbols = st.sidebar.multiselect(
     "Select Cryptocurrencies",
     crypto_symbols,
-    default=['BTC-USD', 'ETH-USD', 'BNB-USD', 'XRP-USD', 'SOL-USD']
+    default=['BTC-USD', 'ETH-USD', 'BNB-USD', 'XRP-USD', 'SOL-USD'],
+    help=f"Choose from {len(crypto_symbols)} cryptocurrencies with 5+ years of historical data"
 )
 
 if len(selected_symbols) < 2:
@@ -977,7 +994,9 @@ def get_cached_data(symbols, start_date, end_date):
     """, unsafe_allow_html=True)
     
     try:
-        price_data = data_manager.get_real_data(symbols, start_date, end_date)
+        # Use hybrid data fetching (local database + real-time API)
+        # start_date and end_date are already strings in 'YYYY-MM-DD' format
+        price_data = data_manager.get_hybrid_data(symbols, start_date, end_date)
         
         if price_data.empty:
             loading_placeholder.empty()
@@ -992,12 +1011,13 @@ def get_cached_data(symbols, start_date, end_date):
         st.session_state.data_cache_key = cache_key
         st.session_state.cache_timestamp = datetime.now()
         
-        # Show brief success message
-        loading_placeholder.markdown("""
+        # Show brief success message with data source info
+        data_info = f"Loaded {price_data.shape[0]} days × {price_data.shape[1]} symbols"
+        loading_placeholder.markdown(f"""
         <div style='position: fixed; top: 70px; right: 20px; background: #f0f9ff; padding: 8px 12px; 
                     border-radius: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 999;
                     border: 1px solid #00d395;'>
-            <span style='font-size: 12px; color: #00d395;'>Data loaded</span>
+            <span style='font-size: 12px; color: #00d395;'>{data_info} (Hybrid: Local + API)</span>
         </div>
         """, unsafe_allow_html=True)
         
@@ -1042,7 +1062,686 @@ if st.sidebar.button("Refresh Data", help="Force fetch fresh data from APIs"):
 st.sidebar.markdown("**Tip**: Data is automatically cached. Only fetches when symbols/dates change!")
 
 # Main content area
-if mode == "Portfolio Optimization":
+if mode == "Market Insights":
+    st.header("Market Analysis & Insights")
+    
+    # Get cached data
+    price_data, returns = get_cached_data(
+        selected_symbols, 
+        start_date.strftime('%Y-%m-%d'), 
+        end_date.strftime('%Y-%m-%d')
+    )
+    
+    # Market overview
+    st.subheader("Market Overview")
+    
+    # Calculate market metrics
+    market_data = []
+    for symbol in selected_symbols:
+        symbol_name = symbol.replace('-USD', '')
+        current_price = price_data[symbol].iloc[-1]
+        start_price = price_data[symbol].iloc[0]
+        total_return = (current_price / start_price - 1)
+        volatility = returns[symbol].std() * np.sqrt(252)
+        
+        # Risk level
+        if volatility > 0.8:
+            risk_level = "Very High"
+        elif volatility > 0.6:
+            risk_level = "High"
+        elif volatility > 0.4:
+            risk_level = "Medium"
+        else:
+            risk_level = "Low"
+        
+        # 7-day and 30-day returns
+        week_return = (current_price / price_data[symbol].iloc[-8] - 1) if len(price_data) >= 8 else 0
+        month_return = (current_price / price_data[symbol].iloc[-31] - 1) if len(price_data) >= 31 else 0
+        
+        market_data.append({
+            'Asset': symbol_name,
+            'Current Price': f"${current_price:,.2f}",
+            'Total Return': f"{total_return:+.1%}",
+            '7D Return': f"{week_return:+.1%}",
+            '30D Return': f"{month_return:+.1%}",
+            'Volatility': f"{volatility:.1%}",
+            'Risk Level': risk_level,
+            '30-Day Avg': f"${price_data[symbol].tail(30).mean():,.2f}"
+        })
+    
+    market_df = pd.DataFrame(market_data)
+    st.dataframe(market_df, use_container_width=True, hide_index=True)
+    
+    # Price Performance Section
+    st.subheader("Price Performance")
+    price_view_mode = st.selectbox("View Mode", ["Normalized", "Raw Price"])
+    
+    if price_view_mode == "Normalized":
+        # Normalize to 100 at start
+        chart_data = (price_data / price_data.iloc[0] * 100)
+        y_title = "Normalized Price (Start = 100)"
+    else:
+        chart_data = price_data
+        y_title = "Price (USD)"
+    
+    fig = go.Figure()
+    for symbol in selected_symbols:
+        fig.add_trace(go.Scatter(
+            x=chart_data.index,
+            y=chart_data[symbol],
+            mode='lines',
+            name=symbol.replace('-USD', ''),
+            line=dict(width=2)
+        ))
+    
+    fig.update_layout(
+        title=f"Price Performance ({price_view_mode})",
+        xaxis_title="Date",
+        yaxis_title=y_title,
+        hovermode='x unified',
+        height=500
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Detailed Individual Coin Analysis
+    st.subheader("Detailed Coin Analysis")
+    
+    # Allow user to select specific coin for detailed analysis
+    selected_coin = st.selectbox(
+        "Select coin for detailed analysis:",
+        options=selected_symbols,
+        format_func=lambda x: x.replace('-USD', '')
+    )
+    
+    if selected_coin:
+        coin_name = selected_coin.replace('-USD', '')
+        coin_data = price_data[selected_coin].dropna()
+        coin_returns = returns[selected_coin].dropna()
+        
+        # Calculate detailed metrics
+        current_price = coin_data.iloc[-1]
+        start_price = coin_data.iloc[0]
+        total_return = (current_price / start_price - 1)
+        
+        # Time-based returns
+        returns_1d = coin_returns.iloc[-1] if len(coin_returns) > 0 else 0
+        returns_7d = (current_price / coin_data.iloc[-8] - 1) if len(coin_data) >= 8 else 0
+        returns_30d = (current_price / coin_data.iloc[-31] - 1) if len(coin_data) >= 31 else 0
+        returns_90d = (current_price / coin_data.iloc[-91] - 1) if len(coin_data) >= 91 else 0
+        
+        # Risk metrics
+        volatility_daily = coin_returns.std()
+        volatility_annual = volatility_daily * np.sqrt(252)
+        sharpe_ratio = (coin_returns.mean() / coin_returns.std() * np.sqrt(252)) if coin_returns.std() > 0 else 0
+        
+        # Drawdown analysis
+        rolling_max = coin_data.expanding().max()
+        drawdown = (coin_data - rolling_max) / rolling_max
+        max_drawdown = drawdown.min()
+        
+        # Price statistics
+        price_high = coin_data.max()
+        price_low = coin_data.min()
+        current_from_high = (current_price - price_high) / price_high
+        current_from_low = (current_price - price_low) / price_low
+        
+        # Display detailed metrics in columns
+        st.write(f"**{coin_name} Detailed Analysis**")
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("Current Price", f"${current_price:,.2f}")
+            st.metric("1-Day Return", f"{returns_1d:.2%}")
+            st.metric("7-Day Return", f"{returns_7d:.2%}")
+        
+        with col2:
+            st.metric("30-Day Return", f"{returns_30d:.2%}")
+            st.metric("90-Day Return", f"{returns_90d:.2%}")
+            st.metric("Period Return", f"{total_return:.2%}")
+        
+        with col3:
+            st.metric("Annual Volatility", f"{volatility_annual:.1%}")
+            st.metric("Sharpe Ratio", f"{sharpe_ratio:.2f}")
+            st.metric("Max Drawdown", f"{max_drawdown:.1%}")
+        
+        with col4:
+            st.metric("Period High", f"${price_high:,.2f}")
+            st.metric("Period Low", f"${price_low:,.2f}")
+            st.metric("From High", f"{current_from_high:.1%}")
+        
+        # Additional analysis tabs
+        tab1, tab2, tab3 = st.tabs(["Price Distribution", "Returns Analysis", "Technical Indicators"])
+        
+        with tab1:
+            # Price histogram
+            fig_hist = go.Figure()
+            fig_hist.add_trace(go.Histogram(
+                x=coin_data,
+                nbinsx=50,
+                name=f"{coin_name} Price Distribution"
+            ))
+            fig_hist.update_layout(
+                title=f"{coin_name} Price Distribution",
+                xaxis_title="Price (USD)",
+                yaxis_title="Frequency",
+                height=400
+            )
+            st.plotly_chart(fig_hist, use_container_width=True)
+        
+        with tab2:
+            # Returns distribution and statistics
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                fig_returns = go.Figure()
+                fig_returns.add_trace(go.Histogram(
+                    x=coin_returns,
+                    nbinsx=50,
+                    name=f"{coin_name} Daily Returns"
+                ))
+                fig_returns.update_layout(
+                    title="Daily Returns Distribution",
+                    xaxis_title="Daily Return",
+                    yaxis_title="Frequency",
+                    height=350
+                )
+                st.plotly_chart(fig_returns, use_container_width=True)
+            
+            with col2:
+                # Returns statistics
+                returns_stats = {
+                    'Mean': f"{coin_returns.mean():.4f}",
+                    'Std Dev': f"{coin_returns.std():.4f}",
+                    'Skewness': f"{coin_returns.skew():.2f}",
+                    'Kurtosis': f"{coin_returns.kurtosis():.2f}",
+                    'Min': f"{coin_returns.min():.2%}",
+                    'Max': f"{coin_returns.max():.2%}",
+                    '5th Percentile': f"{coin_returns.quantile(0.05):.2%}",
+                    '95th Percentile': f"{coin_returns.quantile(0.95):.2%}"
+                }
+                
+                st.write("**Returns Statistics**")
+                for stat, value in returns_stats.items():
+                    st.write(f"{stat}: {value}")
+        
+        with tab3:
+            # Technical indicators
+            # Moving averages
+            ma_20 = coin_data.rolling(20).mean()
+            ma_50 = coin_data.rolling(50).mean()
+            
+            # RSI calculation
+            delta = coin_data.diff()
+            gain = (delta.where(delta > 0, 0)).rolling(14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+            rs = gain / loss
+            rsi = 100 - (100 / (1 + rs))
+            
+            fig_tech = go.Figure()
+            
+            # Price and moving averages
+            fig_tech.add_trace(go.Scatter(
+                x=coin_data.index,
+                y=coin_data,
+                mode='lines',
+                name=f"{coin_name} Price",
+                line=dict(width=2)
+            ))
+            
+            fig_tech.add_trace(go.Scatter(
+                x=ma_20.index,
+                y=ma_20,
+                mode='lines',
+                name='MA-20',
+                line=dict(width=1, dash='dash')
+            ))
+            
+            fig_tech.add_trace(go.Scatter(
+                x=ma_50.index,
+                y=ma_50,
+                mode='lines',
+                name='MA-50',
+                line=dict(width=1, dash='dot')
+            ))
+            
+            fig_tech.update_layout(
+                title=f"{coin_name} Technical Analysis",
+                xaxis_title="Date",
+                yaxis_title="Price (USD)",
+                height=400
+            )
+            st.plotly_chart(fig_tech, use_container_width=True)
+            
+            # RSI chart
+            fig_rsi = go.Figure()
+            fig_rsi.add_trace(go.Scatter(
+                x=rsi.index,
+                y=rsi,
+                mode='lines',
+                name='RSI',
+                line=dict(width=2, color='orange')
+            ))
+            
+            fig_rsi.add_hline(y=70, line_dash="dash", line_color="red", annotation_text="Overbought (70)")
+            fig_rsi.add_hline(y=30, line_dash="dash", line_color="green", annotation_text="Oversold (30)")
+            
+            fig_rsi.update_layout(
+                title="Relative Strength Index (RSI)",
+                xaxis_title="Date",
+                yaxis_title="RSI",
+                height=300,
+                yaxis=dict(range=[0, 100])
+            )
+            st.plotly_chart(fig_rsi, use_container_width=True)
+
+elif mode == "Portfolio Analysis & Backtest":
+    st.header("Portfolio Analysis & Backtesting")
+    
+    # Get cached data
+    price_data, returns = get_cached_data(
+        selected_symbols, 
+        start_date.strftime('%Y-%m-%d'), 
+        end_date.strftime('%Y-%m-%d')
+    )
+    
+    # Manual portfolio weight input (unified from both modes)
+    st.subheader("Define Your Portfolio Weights")
+    
+    # Create columns for weight input
+    n_cols = min(len(selected_symbols), 3)  # Max 3 columns for better layout
+    cols = st.columns(n_cols)
+    
+    portfolio_weights = {}
+    total_weight = 0
+    
+    for i, symbol in enumerate(selected_symbols):
+        col_idx = i % n_cols
+        with cols[col_idx]:
+            # Check for optimized weights from Portfolio Optimization mode
+            if 'portfolio_weights' in st.session_state and symbol in st.session_state.portfolio_weights:
+                default_weight = st.session_state.portfolio_weights[symbol]
+            else:
+                default_weight = 1.0/len(selected_symbols)  # Default equal weight
+            
+            weight = st.number_input(
+                f"{symbol.replace('-USD', '')} Weight", 
+                min_value=0.0, 
+                max_value=1.0, 
+                value=default_weight,
+                step=0.05,
+                key=f"portfolio_weight_{symbol}"
+            )
+            portfolio_weights[symbol] = weight
+            total_weight += weight
+    
+    # Normalize weights to sum to 100%
+    normalized_weights = {}
+    if total_weight > 0:
+        for symbol in selected_symbols:
+            normalized_weights[symbol] = portfolio_weights[symbol] / total_weight
+    else:
+        # Fallback to equal weights
+        for symbol in selected_symbols:
+            normalized_weights[symbol] = 1.0 / len(selected_symbols)
+    
+    # Display weight summary
+    col1, col2 = st.columns(2)
+    with col1:
+        st.write(f"**Total Weight:** {total_weight:.1%}")
+    with col2:
+        if abs(total_weight - 1.0) > 0.01:
+            st.info(f"Weights normalized to 100% (scaling factor: {1/total_weight:.2f})")
+        else:
+            st.success("Weights sum to 100%")
+    
+    # Store weights in session state for other modes
+    st.session_state.portfolio_weights = normalized_weights
+    
+    # Portfolio Allocation Chart
+    st.subheader("Portfolio Allocation")
+    
+    # Create allocation DataFrame
+    allocation_data = pd.DataFrame({
+        'Asset': [symbol.replace('-USD', '') for symbol in normalized_weights.keys()],
+        'Weight': list(normalized_weights.values())
+    })
+    
+    # Professional crypto color palette
+    crypto_colors = [
+        '#F7931A',  # Bitcoin Orange
+        '#627EEA',  # Ethereum Blue  
+        '#F3BA2F',  # Binance Yellow
+        '#00AAE4',  # XRP Blue
+        '#0033AD',  # Cardano Blue
+        '#9945FF',  # Solana Purple
+        '#8247E5',  # Polygon Purple
+        '#E6007A',  # Polkadot Pink
+        '#E84142',  # Avalanche Red
+        '#375BD2',  # Chainlink Blue
+        '#FF007A',  # Uniswap Pink
+        '#BFBBBB',  # Litecoin Silver
+        '#8DC351',  # Bitcoin Cash Green
+        '#2E3148',  # Cosmos Dark
+        '#000000'   # Algorand Black
+    ]
+    
+    fig_pie = px.pie(
+        allocation_data,
+        values='Weight',
+        names='Asset',
+        title="Current Portfolio Allocation",
+        color_discrete_sequence=crypto_colors
+    )
+    fig_pie.update_traces(
+        textposition='inside', 
+        textinfo='percent+label',
+        textfont_size=11,
+        marker=dict(line=dict(color='white', width=2))
+    )
+    fig_pie.update_layout(
+        font=dict(size=12),
+        template='plotly_white',
+        showlegend=True,
+        legend=dict(orientation="v", yanchor="middle", y=0.5)
+    )
+    st.plotly_chart(fig_pie, use_container_width=True)
+    
+    # Portfolio backtest simulation
+    st.subheader("Realistic Backtest Simulation")
+    
+    # Common calculations for coin availability
+    coin_launch_info = {}
+    available_symbols_timeline = []
+    
+    # Track coin launches and availability
+    for i in range(1, len(price_data)):
+        for symbol in selected_symbols:
+            prev_price = price_data[symbol].iloc[i-1]
+            curr_price = price_data[symbol].iloc[i]
+            
+            is_launched = (not pd.isna(prev_price) and not pd.isna(curr_price) and 
+                          prev_price > 0 and curr_price > 0)
+            
+            if is_launched and symbol not in coin_launch_info:
+                first_available_date = price_data.index[i-1].strftime('%Y-%m-%d')
+                analysis_start_date = price_data.index[0].strftime('%Y-%m-%d')
+                
+                if first_available_date == analysis_start_date:
+                    coin_launch_info[symbol] = {'date': first_available_date, 'type': 'pre-existing'}
+                else:
+                    coin_launch_info[symbol] = {'date': first_available_date, 'type': 'launched'}
+    
+    # Display coin availability information
+    if coin_launch_info:
+        st.subheader("Cryptocurrency Availability")
+        
+        availability_data = []
+        for symbol in selected_symbols:
+            if symbol in coin_launch_info:
+                info = coin_launch_info[symbol]
+                if info['type'] == 'pre-existing':
+                    status = f"Available from start"
+                    launch_info = f"Launched before {info['date']}"
+                else:
+                    status = f"Launched {info['date']}"
+                    days_since_start = (pd.to_datetime(info['date']) - price_data.index[0]).days
+                    launch_info = f"Day {days_since_start} of analysis"
+                
+                availability_data.append({
+                    'Cryptocurrency': symbol.replace('-USD', ''),
+                    'Status': status,
+                    'Details': launch_info,
+                    'Weight': f"{normalized_weights[symbol]:.1%}"
+                })
+            else:
+                availability_data.append({
+                    'Cryptocurrency': symbol.replace('-USD', ''),
+                    'Status': 'Not available',
+                    'Details': 'No valid data in period',
+                    'Weight': f"{normalized_weights[symbol]:.1%}"
+                })
+        
+        availability_df = pd.DataFrame(availability_data)
+        st.dataframe(availability_df, use_container_width=True, hide_index=True)
+        st.caption("Note: Pre-existing coins were available before the analysis start date. Their exact launch date is unknown.")
+    
+    # Backtest parameters
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        initial_capital = st.number_input("Initial Capital ($)", value=100000, min_value=1000, step=10000)
+    with col2:
+        rebalance_freq = st.selectbox("Rebalancing", ["No Rebalancing", "Monthly", "Quarterly", "Semi-Annual"])
+    with col3:
+        trading_fee = st.number_input("Trading Fee (%)", value=0.1, min_value=0.0, max_value=1.0, step=0.05) / 100
+    
+    # Generate rebalancing dates
+    def get_rebalance_dates(date_index, frequency):
+        rebalance_dates = []
+        if frequency == "No Rebalancing":
+            return set()  # No rebalancing dates
+        elif frequency == "Monthly":
+            for year in range(date_index[0].year, date_index[-1].year + 1):
+                for month in range(1, 13):
+                    month_start = pd.Timestamp(year, month, 1)
+                    month_dates = [d for d in date_index if d >= month_start and d.month == month and d.year == year]
+                    if month_dates:
+                        rebalance_dates.append(min(month_dates))
+        elif frequency == "Quarterly":
+            for year in range(date_index[0].year, date_index[-1].year + 1):
+                for month in [1, 4, 7, 10]:
+                    quarter_start = pd.Timestamp(year, month, 1)
+                    quarter_dates = [d for d in date_index if d >= quarter_start and d.month == month and d.year == year]
+                    if quarter_dates:
+                        rebalance_dates.append(min(quarter_dates))
+        else:  # Semi-Annual
+            for year in range(date_index[0].year, date_index[-1].year + 1):
+                for month in [1, 7]:
+                    semi_start = pd.Timestamp(year, month, 1)
+                    semi_dates = [d for d in date_index if d >= semi_start and d.month == month and d.year == year]
+                    if semi_dates:
+                        rebalance_dates.append(min(semi_dates))
+        return set(rebalance_dates)
+    
+    rebalance_dates = get_rebalance_dates(price_data.index, rebalance_freq)
+    
+    # Portfolio simulation with realistic costs
+    portfolio_values = []
+    portfolio_shares = {symbol: 0 for symbol in selected_symbols}
+    rebalance_costs = []
+    
+    # Equal weight benchmark for comparison
+    def get_dynamic_equal_weights(symbols, price_data, date_index):
+        available_symbols = []
+        for symbol in symbols:
+            if not pd.isna(price_data[symbol].iloc[date_index]) and price_data[symbol].iloc[date_index] > 0:
+                available_symbols.append(symbol)
+        
+        if not available_symbols:
+            return {symbol: 0 for symbol in symbols}
+        
+        equal_weight_per_coin = 1.0 / len(available_symbols)
+        dynamic_weights = {}
+        for symbol in symbols:
+            if symbol in available_symbols:
+                dynamic_weights[symbol] = equal_weight_per_coin
+            else:
+                dynamic_weights[symbol] = 0
+        return dynamic_weights
+    
+    equal_weight_values = []
+    
+    for i, date in enumerate(price_data.index):
+            if i == 0:
+                # Initial investment with trading costs
+                initial_cost = initial_capital * trading_fee
+                remaining_capital = initial_capital - initial_cost
+                
+                # Simple allocation using fixed weights
+                for symbol in selected_symbols:
+                    if not pd.isna(price_data[symbol].iloc[i]) and price_data[symbol].iloc[i] > 0:
+                        allocation = remaining_capital * normalized_weights[symbol]
+                        portfolio_shares[symbol] = allocation / price_data[symbol].iloc[i]
+                    else:
+                        portfolio_shares[symbol] = 0
+                
+                # Calculate actual portfolio value from shares (should equal remaining_capital)
+                portfolio_value = sum(portfolio_shares[symbol] * price_data[symbol].iloc[i] 
+                                    for symbol in selected_symbols 
+                                    if not pd.isna(price_data[symbol].iloc[i]) and price_data[symbol].iloc[i] > 0)
+                equal_weight_value = initial_capital
+                rebalance_costs.append(initial_cost)
+            else:
+                # Calculate current portfolio value
+                current_portfolio_value = 0
+                for symbol in selected_symbols:
+                    if not pd.isna(price_data[symbol].iloc[i]) and price_data[symbol].iloc[i] > 0:
+                        current_portfolio_value += portfolio_shares[symbol] * price_data[symbol].iloc[i]
+                
+                # Check if rebalancing needed
+                if date in rebalance_dates:
+                    turnover = 0.5
+                    rebalance_cost = current_portfolio_value * turnover * trading_fee
+                    net_value = current_portfolio_value - rebalance_cost
+                    
+                    # Rebalance with dynamic weights
+                    available_symbols = []
+                    for symbol in selected_symbols:
+                        if not pd.isna(price_data[symbol].iloc[i]) and price_data[symbol].iloc[i] > 0:
+                            available_symbols.append(symbol)
+                    
+                    if available_symbols:
+                        available_original_weights = {sym: result['weights'].get(sym, 1.0/len(selected_symbols)) for sym in available_symbols}
+                        total_available_weight = sum(available_original_weights.values())
+                        unavailable_weight = 1.0 - total_available_weight
+                        
+                        if total_available_weight > 0:
+                            rebalance_dynamic_weights = {}
+                            for symbol in available_symbols:
+                                proportional_share = available_original_weights[symbol] / total_available_weight
+                                rebalance_dynamic_weights[symbol] = available_original_weights[symbol] + (unavailable_weight * proportional_share)
+                            
+                            for symbol in selected_symbols:
+                                if symbol in available_symbols:
+                                    allocation = net_value * rebalance_dynamic_weights[symbol]
+                                    portfolio_shares[symbol] = allocation / price_data[symbol].iloc[i]
+                                else:
+                                    portfolio_shares[symbol] = 0
+                        else:
+                            for symbol in selected_symbols:
+                                portfolio_shares[symbol] = 0
+                    else:
+                        for symbol in selected_symbols:
+                            portfolio_shares[symbol] = 0
+                    
+                    portfolio_value = net_value
+                    rebalance_costs.append(rebalance_cost)
+                else:
+                    portfolio_value = current_portfolio_value
+                    rebalance_costs.append(0)
+                
+                # Equal weight benchmark
+                current_equal_weights = get_dynamic_equal_weights(selected_symbols, price_data, i)
+                equal_weight_return = 0
+                for symbol in selected_symbols:
+                    if current_equal_weights[symbol] > 0 and not pd.isna(price_data[symbol].iloc[i]) and not pd.isna(price_data[symbol].iloc[i-1]):
+                        symbol_return = price_data[symbol].iloc[i] / price_data[symbol].iloc[i-1] - 1
+                        equal_weight_return += current_equal_weights[symbol] * symbol_return
+                equal_weight_value = equal_weight_values[-1] * (1 + equal_weight_return)
+            
+            portfolio_values.append(portfolio_value)
+            equal_weight_values.append(equal_weight_value)
+        
+    # Performance metrics
+    portfolio_total_return = (portfolio_values[-1] / portfolio_values[0] - 1)
+    equal_weight_total_return = (equal_weight_values[-1] / equal_weight_values[0] - 1)
+    total_trading_costs = sum(rebalance_costs)
+    
+    # Display metrics
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Portfolio Return", f"{portfolio_total_return:.1%}")
+    with col2:
+        st.metric("Equal Weight Return", f"{equal_weight_total_return:.1%}")
+    with col3:
+        st.metric("Trading Costs", f"${total_trading_costs:,.0f}")
+    with col4:
+        st.metric("Cost Ratio", f"{total_trading_costs/initial_capital:.2%}")
+    
+    # Calculate drawdown for portfolio (needed for comparisons)
+    rolling_max = pd.Series(portfolio_values).expanding().max()
+    drawdown = (pd.Series(portfolio_values) - rolling_max) / rolling_max
+    max_drawdown = drawdown.min()
+    
+    # Backtest Performance Chart
+    st.subheader("Backtest Performance")
+    
+    backtest_fig = go.Figure()
+    backtest_fig.add_trace(go.Scatter(
+        x=price_data.index,
+        y=portfolio_values,
+        mode='lines',
+        name='Your Portfolio',
+        line=dict(width=3, color='#1652f0')
+    ))
+    backtest_fig.add_trace(go.Scatter(
+        x=price_data.index,
+        y=equal_weight_values,
+        mode='lines',
+        name='Equal Weight Benchmark',
+        line=dict(width=2, color='#00d395', dash='dash')
+    ))
+    
+    backtest_fig.update_layout(
+        title="Realistic Backtest Performance (With Trading Costs)",
+        xaxis_title="Date",
+        yaxis_title="Portfolio Value ($)",
+        hovermode='x unified',
+        height=400
+    )
+    st.plotly_chart(backtest_fig, use_container_width=True)
+        
+    # Rebalancing info
+    num_rebalances = len([cost for cost in rebalance_costs if cost > 0]) - 1  # Exclude initial cost
+    if rebalance_freq == "No Rebalancing":
+        st.info(f"Buy-and-hold strategy: No rebalancing performed. Initial trading cost: {total_trading_costs/initial_capital:.2%} of capital.")
+    elif num_rebalances > 0:
+        st.info(f"Portfolio rebalanced {num_rebalances} times. Total trading costs: {total_trading_costs/initial_capital:.2%} of initial capital.")
+    else:
+        st.info("No rebalancing occurred during this period.")
+    
+    # Drawdown Analysis
+    st.subheader("Downturn Analysis")
+    
+    # Display max drawdown metric (drawdown already calculated above)
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Max Drawdown", f"{max_drawdown:.1%}")
+    with col2:
+        st.metric("Volatility", f"{pd.Series(portfolio_values).pct_change().std() * np.sqrt(252):.1%}")
+    
+    # Drawdown chart
+    fig_dd = go.Figure()
+    fig_dd.add_trace(go.Scatter(
+        x=price_data.index,
+        y=drawdown * 100,
+        name='Drawdown',
+        fill='tonexty',
+        line=dict(color='#e85555'),
+        fillcolor='rgba(232, 85, 85, 0.3)'
+    ))
+    
+    fig_dd.update_layout(
+        title="Portfolio Drawdown Over Time",
+        xaxis_title="Date",
+        yaxis_title="Drawdown (%)",
+        height=350,
+        template='plotly_dark' if st.session_state.theme == 'dark' else 'plotly_white'
+    )
+    
+    st.plotly_chart(fig_dd, use_container_width=True)
+
+elif mode == "Portfolio Optimization":
     st.header("Advanced Portfolio Optimization")
     
     # Get cached data
@@ -1156,7 +1855,7 @@ if mode == "Portfolio Optimization":
                 max_weight_actual = max(result['weights'].values())
                 st.metric("Max Weight", f"{max_weight_actual:.1%}")
             
-            # Portfolio allocation
+            # Optimized Portfolio Allocation Chart
             st.subheader("Optimized Portfolio Allocation")
             
             # Create allocation DataFrame
@@ -1165,86 +1864,59 @@ if mode == "Portfolio Optimization":
                 if weight > 0.001:  # Only show meaningful allocations
                     allocation_data.append({
                         'Asset': asset.replace('-USD', ''),
-                        'Weight': weight,
-                        'Weight (%)': f"{weight:.1%}",
-                        'Risk Contribution': result['risk_contributions'][asset],
-                        'Risk Contrib (%)': f"{result['risk_contributions'][asset]:.1%}"
+                        'Weight': weight
                     })
             
             allocation_df = pd.DataFrame(allocation_data)
             allocation_df = allocation_df.sort_values('Weight', ascending=False)
             
-            # Set Asset as index and display table without separate Asset column
-            allocation_display = allocation_df.set_index('Asset')[['Weight (%)', 'Risk Contrib (%)']]
+            # Professional crypto color palette
+            crypto_colors = [
+                '#F7931A',  # Bitcoin Orange
+                '#627EEA',  # Ethereum Blue  
+                '#F3BA2F',  # Binance Yellow
+                '#00AAE4',  # XRP Blue
+                '#0033AD',  # Cardano Blue
+                '#9945FF',  # Solana Purple
+                '#8247E5',  # Polygon Purple
+                '#E6007A',  # Polkadot Pink
+                '#E84142',  # Avalanche Red
+                '#375BD2',  # Chainlink Blue
+                '#FF007A',  # Uniswap Pink
+                '#BFBBBB',  # Litecoin Silver
+                '#8DC351',  # Bitcoin Cash Green
+                '#2E3148',  # Cosmos Dark
+                '#000000'   # Algorand Black
+            ]
             
-            # Display allocation table
-            st.dataframe(allocation_display, use_container_width=True)
+            fig_pie = px.pie(
+                allocation_df,
+                values='Weight',
+                names='Asset',
+                title="Optimized Portfolio Weights",
+                color_discrete_sequence=crypto_colors
+            )
+            fig_pie.update_traces(
+                textposition='inside', 
+                textinfo='percent+label',
+                textfont_size=11,
+                marker=dict(line=dict(color='white', width=2))
+            )
+            fig_pie.update_layout(
+                font=dict(size=12),
+                template='plotly_white',
+                showlegend=True,
+                legend=dict(orientation="v", yanchor="middle", y=0.5)
+            )
+            st.plotly_chart(fig_pie, use_container_width=True)
             
-            # Portfolio allocation pie chart
-            col1, col2 = st.columns(2)
+            # Set optimized weights as the active portfolio weights
+            st.session_state.portfolio_weights = result['weights']
+            st.success("Optimized weights have been applied to your portfolio!")
             
-            with col1:
-                # Professional crypto color palette
-                crypto_colors = [
-                    '#F7931A',  # Bitcoin Orange
-                    '#627EEA',  # Ethereum Blue  
-                    '#F3BA2F',  # Binance Yellow
-                    '#00AAE4',  # XRP Blue
-                    '#0033AD',  # Cardano Blue
-                    '#9945FF',  # Solana Purple
-                    '#8247E5',  # Polygon Purple
-                    '#E6007A',  # Polkadot Pink
-                    '#E84142',  # Avalanche Red
-                    '#375BD2',  # Chainlink Blue
-                    '#FF007A',  # Uniswap Pink
-                    '#BFBBBB',  # Litecoin Silver
-                    '#8DC351',  # Bitcoin Cash Green
-                    '#2E3148',  # Cosmos Dark
-                    '#000000'   # Algorand Black
-                ]
-                
-                fig_pie = px.pie(
-                    allocation_df,
-                    values='Weight',
-                    names='Asset',
-                    title="Portfolio Allocation",
-                    color_discrete_sequence=crypto_colors
-                )
-                fig_pie.update_traces(
-                    textposition='inside', 
-                    textinfo='percent+label',
-                    textfont_size=11,
-                    marker=dict(line=dict(color='white', width=2))
-                )
-                fig_pie.update_layout(
-                    font=dict(size=12),
-                    template='plotly_white',
-                    showlegend=True,
-                    legend=dict(orientation="v", yanchor="middle", y=0.5)
-                )
-                st.plotly_chart(fig_pie, use_container_width=True)
+            # Redirection message to other modes
+            st.info("**Next Steps:** Go to the **Portfolio Analysis** mode to see detailed backtesting results with your optimized weights, or visit **ML Prediction** mode to get AI-powered forecasts using these optimal allocations.")
             
-            with col2:
-                fig_risk = px.pie(
-                    allocation_df,
-                    values='Risk Contribution',
-                    names='Asset',
-                    title="Risk Contribution",
-                    color_discrete_sequence=crypto_colors
-                )
-                fig_risk.update_traces(
-                    textposition='inside', 
-                    textinfo='percent+label',
-                    textfont_size=11,
-                    marker=dict(line=dict(color='white', width=2))
-                )
-                fig_risk.update_layout(
-                    font=dict(size=12),
-                    template='plotly_white',
-                    showlegend=True,
-                    legend=dict(orientation="v", yanchor="middle", y=0.5)
-                )
-                st.plotly_chart(fig_risk, use_container_width=True)
         
         else:
             st.error(f"Optimization failed: {result.get('error', 'Unknown error')}")
@@ -1252,378 +1924,21 @@ if mode == "Portfolio Optimization":
     
     else:
         st.info("Configure your preferences and click 'Optimize Portfolio' to get started")
-
-elif mode == "Sample Backtest":
-    st.header("Portfolio Backtesting Analysis")
     
-    # Get cached data
-    price_data, returns = get_cached_data(
-        selected_symbols, 
-        start_date.strftime('%Y-%m-%d'), 
-        end_date.strftime('%Y-%m-%d')
-    )
+    # Enhanced Analytics Information
+    st.subheader("Enhanced Analytics")
     
-    # Manual weight input
-    st.subheader("Portfolio Allocation")
+    st.info("For comprehensive backtest results, strategy performance comparisons, and detailed portfolio analytics, please visit our enhanced web application at: **[CryptoPortfolio.live](https://cryptoportfolio.live)**")
     
-    weights = {}
-    cols = st.columns(len(selected_symbols))
+    st.markdown("""
+    ### What you'll find on the full platform:
+    - **Advanced Backtest Results** with detailed performance metrics
+    - **Strategy Performance Comparison** across multiple optimization methods
+    - **Interactive Charts** with customizable timeframes and indicators
+    - **Risk Analytics** including drawdown analysis and volatility metrics
+    - **Portfolio Rebalancing** insights and cost analysis
+    """)
     
-    for i, symbol in enumerate(selected_symbols):
-        with cols[i]:
-            symbol_name = symbol.replace('-USD', '')
-            weights[symbol] = st.number_input(
-                f"{symbol_name}",
-                min_value=0.0,
-                max_value=1.0,
-                value=1.0/len(selected_symbols),
-                step=0.05,
-                format="%.2f"
-            )
-    
-    # Normalize weights
-    total_weight = sum(weights.values())
-    if total_weight > 0:
-        normalized_weights = {k: v/total_weight for k, v in weights.items()}
-    else:
-        normalized_weights = {k: 1.0/len(selected_symbols) for k in selected_symbols}
-    
-    st.info(f"Total weight: {total_weight:.1%} (automatically normalized to 100%)")
-    
-    # Portfolio parameters
-    col1, col2 = st.columns(2)
-    with col1:
-        initial_capital = st.number_input("Initial Capital ($)", value=100000, min_value=1000, step=10000)
-    with col2:
-        rebalance_freq = st.selectbox("Rebalancing", ["Monthly", "Quarterly", "Semi-Annual"])
-    
-    # Generate rebalancing dates based on frequency
-    def get_rebalance_dates(date_index, frequency):
-        rebalance_dates = []
-        if frequency == "Monthly":
-            # First trading day of each month
-            for year in range(date_index[0].year, date_index[-1].year + 1):
-                for month in range(1, 13):
-                    month_start = pd.Timestamp(year, month, 1)
-                    month_dates = [d for d in date_index if d >= month_start and d.month == month and d.year == year]
-                    if month_dates:
-                        rebalance_dates.append(min(month_dates))
-        elif frequency == "Quarterly":
-            # First trading day of Jan, Apr, Jul, Oct
-            for year in range(date_index[0].year, date_index[-1].year + 1):
-                for month in [1, 4, 7, 10]:
-                    quarter_start = pd.Timestamp(year, month, 1)
-                    quarter_dates = [d for d in date_index if d >= quarter_start and d.month == month and d.year == year]
-                    if quarter_dates:
-                        rebalance_dates.append(min(quarter_dates))
-        elif frequency == "Semi-Annual":
-            # First trading day of Jan and Jul
-            for year in range(date_index[0].year, date_index[-1].year + 1):
-                for month in [1, 7]:
-                    semi_start = pd.Timestamp(year, month, 1)
-                    semi_dates = [d for d in date_index if d >= semi_start and d.month == month and d.year == year]
-                    if semi_dates:
-                        rebalance_dates.append(min(semi_dates))
-        return set(rebalance_dates)
-    
-    rebalance_dates = get_rebalance_dates(price_data.index, rebalance_freq)
-    trading_fee = 0.001  # 0.1% trading fee per transaction
-    
-    # Enhanced portfolio simulation with rebalancing
-    portfolio_values = []
-    btc_values = []
-    eth_values = []
-    equal_weight_values = []
-    portfolio_shares = {symbol: 0 for symbol in selected_symbols}  # Track actual shares
-    rebalance_costs = []
-    
-    # Equal weight benchmark
-    equal_weights = {symbol: 1.0/len(selected_symbols) for symbol in selected_symbols}
-    
-    for i, date in enumerate(price_data.index):
-        if i == 0:
-            # Initial investment
-            portfolio_value = initial_capital
-            btc_value = initial_capital
-            eth_value = initial_capital
-            equal_weight_value = initial_capital
-            
-            # Initial allocation with trading costs
-            initial_cost = initial_capital * trading_fee
-            remaining_capital = initial_capital - initial_cost
-            for symbol in selected_symbols:
-                allocation = remaining_capital * normalized_weights[symbol]
-                portfolio_shares[symbol] = allocation / price_data[symbol].iloc[i]
-            
-            rebalance_costs.append(initial_cost)
-        else:
-            # Calculate current portfolio value from shares
-            current_portfolio_value = sum(portfolio_shares[symbol] * price_data[symbol].iloc[i] for symbol in selected_symbols)
-            
-            # Check if rebalancing is needed
-            if date in rebalance_dates:
-                # Rebalancing: sell all positions and buy according to target weights
-                turnover = 0.5  # Assume 50% turnover
-                rebalance_cost = current_portfolio_value * turnover * trading_fee
-                net_value = current_portfolio_value - rebalance_cost
-                
-                # Reallocate shares based on target weights
-                for symbol in selected_symbols:
-                    allocation = net_value * normalized_weights[symbol]
-                    portfolio_shares[symbol] = allocation / price_data[symbol].iloc[i]
-                
-                portfolio_value = net_value
-                rebalance_costs.append(rebalance_cost)
-            else:
-                # No rebalancing - value changes with market
-                portfolio_value = current_portfolio_value
-                rebalance_costs.append(0)
-            
-            # BTC benchmark
-            if 'BTC-USD' in price_data.columns:
-                btc_return = price_data['BTC-USD'].iloc[i] / price_data['BTC-USD'].iloc[i-1] - 1
-                btc_value = btc_values[-1] * (1 + btc_return)
-            else:
-                btc_value = btc_values[-1]
-            
-            # ETH benchmark
-            if 'ETH-USD' in price_data.columns:
-                eth_return = price_data['ETH-USD'].iloc[i] / price_data['ETH-USD'].iloc[i-1] - 1
-                eth_value = eth_values[-1] * (1 + eth_return)
-            else:
-                eth_value = eth_values[-1]
-            
-            # Equal weight benchmark (also with rebalancing)
-            equal_weight_return = sum(equal_weights[symbol] * (price_data[symbol].iloc[i] / price_data[symbol].iloc[i-1] - 1) for symbol in selected_symbols)
-            equal_weight_value = equal_weight_values[-1] * (1 + equal_weight_return)
-        
-        portfolio_values.append(portfolio_value)
-        btc_values.append(btc_value)
-        eth_values.append(eth_value)
-        equal_weight_values.append(equal_weight_value)
-    
-    # Performance metrics
-    portfolio_total_return = (portfolio_values[-1] / portfolio_values[0] - 1)
-    btc_total_return = (btc_values[-1] / btc_values[0] - 1)
-    eth_total_return = (eth_values[-1] / eth_values[0] - 1)
-    equal_weight_total_return = (equal_weight_values[-1] / equal_weight_values[0] - 1)
-    
-    # Calculate additional metrics
-    portfolio_returns_series = pd.Series(portfolio_values).pct_change().dropna()
-    portfolio_volatility = portfolio_returns_series.std() * np.sqrt(252)
-    portfolio_sharpe = (portfolio_total_return * 252 - 0.02) / (portfolio_volatility * np.sqrt(252)) if portfolio_volatility > 0 else 0
-    
-    # Max drawdown calculation
-    rolling_max = pd.Series(portfolio_values).expanding().max()
-    drawdown = (pd.Series(portfolio_values) - rolling_max) / rolling_max
-    max_drawdown = drawdown.min()
-    
-    # Display results
-    st.subheader("Backtest Results")
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric(
-            "Portfolio Return", 
-            f"{portfolio_total_return:.1%}",
-            delta=f"{portfolio_total_return - btc_total_return:.1%}"
-        )
-    
-    with col2:
-        st.metric("Final Value", f"${portfolio_values[-1]:,.0f}")
-    
-    with col3:
-        days_total = len(portfolio_values)
-        annualized_return = (portfolio_values[-1] / portfolio_values[0]) ** (365 / days_total) - 1
-        st.metric("Annualized Return", f"{annualized_return:.1%}")
-    
-    with col4:
-        st.metric("Max Drawdown", f"{max_drawdown:.1%}")
-    
-    # Additional metrics row
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("Volatility", f"{portfolio_volatility:.1%}")
-    with col2:
-        st.metric("Sharpe Ratio", f"{portfolio_sharpe:.2f}")
-    with col3:
-        st.metric("BTC Return", f"{btc_total_return:.1%}")
-    with col4:
-        st.metric("ETH Return", f"{eth_total_return:.1%}")
-    
-    # Performance comparison chart
-    st.subheader("Performance Comparison")
-    
-    fig = go.Figure()
-    
-    fig.add_trace(go.Scatter(
-        x=price_data.index,
-        y=portfolio_values,
-        name='Your Portfolio',
-        line=dict(color='#5ac53a', width=3)
-    ))
-    
-    fig.add_trace(go.Scatter(
-        x=price_data.index,
-        y=btc_values,
-        name='BTC Hold',
-        line=dict(color='#f7931a', width=2)
-    ))
-    
-    fig.add_trace(go.Scatter(
-        x=price_data.index,
-        y=eth_values,
-        name='ETH Hold',
-        line=dict(color='#627eea', width=2)
-    ))
-    
-    fig.add_trace(go.Scatter(
-        x=price_data.index,
-        y=equal_weight_values,
-        name='Equal Weight',
-        line=dict(color='#b3b3b3', width=2, dash='dash')
-    ))
-    
-    fig.update_layout(
-        title="Portfolio Performance vs Benchmarks",
-        xaxis_title="Date",
-        yaxis_title="Portfolio Value ($)",
-        hovermode='x unified',
-        height=500,
-        template='plotly_dark' if st.session_state.theme == 'dark' else 'plotly_white'
-    )
-    
-    st.plotly_chart(fig, use_container_width=True, hide_index=True)
-    
-    # Drawdown chart
-    st.subheader("Drawdown Analysis")
-    
-    fig_dd = go.Figure()
-    fig_dd.add_trace(go.Scatter(
-        x=price_data.index,
-        y=drawdown * 100,
-        name='Drawdown',
-        fill='tonexty',
-        line=dict(color='#e85555'),
-        fillcolor='rgba(232, 85, 85, 0.3)'
-    ))
-    
-    fig_dd.update_layout(
-        title="Portfolio Drawdown Over Time",
-        xaxis_title="Date",
-        yaxis_title="Drawdown (%)",
-        height=350,
-        template='plotly_dark' if st.session_state.theme == 'dark' else 'plotly_white'
-    )
-    
-    st.plotly_chart(fig_dd, use_container_width=True, hide_index=True)
-    
-    # Portfolio allocation pie chart
-    st.subheader("Portfolio Allocation")
-    
-    allocation_data = pd.DataFrame({
-        'Asset': [symbol.replace('-USD', '') for symbol in normalized_weights.keys()],
-        'Weight': list(normalized_weights.values())
-    })
-    
-    # Professional crypto color palette
-    crypto_colors = [
-        '#F7931A',  # Bitcoin Orange
-        '#627EEA',  # Ethereum Blue  
-        '#F3BA2F',  # Binance Yellow
-        '#00AAE4',  # XRP Blue
-        '#0033AD',  # Cardano Blue
-        '#9945FF',  # Solana Purple
-        '#8247E5',  # Polygon Purple
-        '#E6007A',  # Polkadot Pink
-        '#E84142',  # Avalanche Red
-        '#375BD2',  # Chainlink Blue
-        '#FF007A',  # Uniswap Pink
-        '#BFBBBB',  # Litecoin Silver
-        '#8DC351',  # Bitcoin Cash Green
-        '#2E3148',  # Cosmos Dark
-        '#000000'   # Algorand Black
-    ]
-    
-    fig_pie = px.pie(
-        allocation_data,
-        values='Weight',
-        names='Asset',
-        title="Current Portfolio Allocation",
-        color_discrete_sequence=crypto_colors
-    )
-    fig_pie.update_traces(
-        textposition='inside', 
-        textinfo='percent+label',
-        textfont_size=11,
-        marker=dict(line=dict(color='white', width=2))
-    )
-    fig_pie.update_layout(
-        font=dict(size=12),
-        template='plotly_white',
-        showlegend=True,
-        legend=dict(orientation="v", yanchor="middle", y=0.5)
-    )
-    st.plotly_chart(fig_pie, use_container_width=True)
-    
-    # Rebalancing statistics
-    total_rebalance_cost = sum(rebalance_costs)
-    num_rebalances = len([cost for cost in rebalance_costs if cost > 0])
-    
-    st.subheader("Rebalancing Summary")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Rebalancing Frequency", rebalance_freq)
-    with col2:
-        st.metric("Number of Rebalances", f"{num_rebalances}")
-    with col3:
-        st.metric("Total Trading Costs", f"${total_rebalance_cost:,.0f}")
-    
-    if num_rebalances > 0:
-        st.info(f"Portfolio rebalanced {num_rebalances} times during the period. Trading costs: {total_rebalance_cost/initial_capital:.2%} of initial capital.")
-    
-    # Performance summary table
-    st.subheader("Performance Summary")
-    
-    summary_data = [
-        {
-            'Strategy': 'Your Portfolio',
-            'Total Return': f"{portfolio_total_return:.1%}",
-            'Annualized Return': f"{annualized_return:.1%}",
-            'Volatility': f"{portfolio_volatility:.1%}",
-            'Sharpe Ratio': f"{portfolio_sharpe:.2f}",
-            'Max Drawdown': f"{max_drawdown:.1%}"
-        },
-        {
-            'Strategy': 'BTC Hold',
-            'Total Return': f"{btc_total_return:.1%}",
-            'Annualized Return': f"{((btc_values[-1] / btc_values[0]) ** (365 / days_total) - 1):.1%}",
-            'Volatility': 'N/A',
-            'Sharpe Ratio': 'N/A',
-            'Max Drawdown': 'N/A'
-        },
-        {
-            'Strategy': 'ETH Hold',
-            'Total Return': f"{eth_total_return:.1%}",
-            'Annualized Return': f"{((eth_values[-1] / eth_values[0]) ** (365 / days_total) - 1):.1%}",
-            'Volatility': 'N/A',
-            'Sharpe Ratio': 'N/A',
-            'Max Drawdown': 'N/A'
-        },
-        {
-            'Strategy': 'Equal Weight',
-            'Total Return': f"{equal_weight_total_return:.1%}",
-            'Annualized Return': f"{((equal_weight_values[-1] / equal_weight_values[0]) ** (365 / days_total) - 1):.1%}",
-            'Volatility': 'N/A',
-            'Sharpe Ratio': 'N/A',
-            'Max Drawdown': 'N/A'
-        }
-    ]
-    
-    summary_df = pd.DataFrame(summary_data)
-    st.dataframe(summary_df, use_container_width=True, hide_index=True)
 
 elif mode == "Market Insights":
     st.header("Market Analysis & Insights")
@@ -2125,17 +2440,28 @@ elif mode == "ML Predictions":
         
         # Allow user to input portfolio weights
         st.write("**Define Portfolio Weights for Prediction**")
+        
+        # Check if optimized weights are available
+        if 'portfolio_weights' in st.session_state:
+            st.info("Using optimized weights from Portfolio Optimization mode. You can adjust them below if needed.")
+        
         portfolio_weights = {}
         cols = st.columns(min(len(selected_symbols), 3))
         
         total_weight = 0
         for i, symbol in enumerate(selected_symbols):
             with cols[i % len(cols)]:
+                # Use optimized weights if available, otherwise equal weights
+                if 'portfolio_weights' in st.session_state and symbol in st.session_state.portfolio_weights:
+                    default_weight = st.session_state.portfolio_weights[symbol]
+                else:
+                    default_weight = 1.0/len(selected_symbols)
+                
                 weight = st.number_input(
                     f"{symbol.replace('-USD', '')} Weight",
                     min_value=0.0,
                     max_value=1.0,
-                    value=1.0/len(selected_symbols),
+                    value=default_weight,
                     step=0.05,
                     key=f"ml_weight_{symbol}"
                 )
@@ -2396,11 +2722,11 @@ elif mode == "AI Investment Advisor":
         try:
             response = requests.get("https://api.openai.com/v1/models", headers=headers, timeout=10)
             if response.status_code == 200:
-                return True, "✅ Valid OpenAI API key"
+                return True, "Valid OpenAI API key"
             else:
-                return False, "❌ Invalid OpenAI API key"
+                return False, "Invalid OpenAI API key"
         except Exception as e:
-            return False, f"❌ Error validating OpenAI key: Connection failed"
+            return False, f"Error validating OpenAI key: Connection failed"
     
     def validate_anthropic_key(api_key):
         """Validate Anthropic API key"""
@@ -2421,11 +2747,11 @@ elif mode == "AI Investment Advisor":
             response = requests.post("https://api.anthropic.com/v1/messages", 
                                    headers=headers, json=data, timeout=10)
             if response.status_code == 200:
-                return True, "✅ Valid Anthropic API key"
+                return True, "Valid Anthropic API key"
             else:
-                return False, "❌ Invalid Anthropic API key"
+                return False, "Invalid Anthropic API key"
         except Exception as e:
-            return False, f"❌ Error validating Anthropic key: Connection failed"
+            return False, f"Error validating Anthropic key: Connection failed"
     
     def validate_google_key(api_key):
         """Validate Google API key"""
@@ -2444,11 +2770,11 @@ elif mode == "AI Investment Advisor":
         try:
             response = requests.post(url, headers=headers, json=data, timeout=10)
             if response.status_code == 200:
-                return True, "✅ Valid Google API key"
+                return True, "Valid Google API key"
             else:
-                return False, "❌ Invalid Google API key"
+                return False, "Invalid Google API key"
         except Exception as e:
-            return False, f"❌ Error validating Google key: Connection failed"
+            return False, f"Error validating Google key: Connection failed"
 
     # API Key input
     api_key = st.sidebar.text_input(
@@ -3183,22 +3509,121 @@ else:  # Portfolio Analysis
     portfolio_returns = []
     portfolio_values = [10000]  # Start with $10,000
     
+    # Track dynamic weights and coin launches
+    dynamic_weights_history = []
+    coin_launch_info = {}
+    
     for i in range(1, len(price_data)):
+        # Determine which coins are available (launched) at this date
+        available_symbols = []
         daily_returns = {}
-        for symbol in selected_symbols:
-            daily_returns[symbol] = price_data[symbol].iloc[i] / price_data[symbol].iloc[i-1] - 1
         
-        # Calculate weighted portfolio return
-        portfolio_return = sum(normalized_weights[symbol] * daily_returns[symbol] for symbol in selected_symbols)
+        for symbol in selected_symbols:
+            prev_price = price_data[symbol].iloc[i-1]
+            curr_price = price_data[symbol].iloc[i]
+            
+            # Check if coin is launched (has valid price data)
+            is_launched = (not pd.isna(prev_price) and not pd.isna(curr_price) and 
+                          prev_price > 0 and curr_price > 0)
+            
+            if is_launched:
+                available_symbols.append(symbol)
+                daily_returns[symbol] = (curr_price / prev_price) - 1
+                
+                # Track first availability in our analysis period
+                if symbol not in coin_launch_info:
+                    first_available_date = price_data.index[i-1].strftime('%Y-%m-%d')
+                    analysis_start_date = price_data.index[0].strftime('%Y-%m-%d')
+                    
+                    # Determine if this is actual launch or pre-existing
+                    if first_available_date == analysis_start_date:
+                        coin_launch_info[symbol] = {'date': first_available_date, 'type': 'pre-existing'}
+                    else:
+                        coin_launch_info[symbol] = {'date': first_available_date, 'type': 'launched'}
+            else:
+                daily_returns[symbol] = 0  # Not yet launched or missing data
+        
+        # Calculate dynamic weights: redistribute unavailable coins' weights to available ones
+        if available_symbols:
+            # Get original weights for available symbols
+            available_original_weights = {sym: normalized_weights[sym] for sym in available_symbols}
+            total_available_weight = sum(available_original_weights.values())
+            
+            # If some coins are unavailable, redistribute their weights proportionally
+            unavailable_weight = 1.0 - total_available_weight
+            
+            if total_available_weight > 0:
+                # Redistribute unavailable weight proportionally among available coins
+                dynamic_weights = {}
+                for symbol in available_symbols:
+                    proportional_share = available_original_weights[symbol] / total_available_weight
+                    dynamic_weights[symbol] = available_original_weights[symbol] + (unavailable_weight * proportional_share)
+                
+                # Ensure weights sum to 1.0
+                total_dynamic_weight = sum(dynamic_weights.values())
+                if total_dynamic_weight > 0:
+                    dynamic_weights = {sym: weight/total_dynamic_weight for sym, weight in dynamic_weights.items()}
+            else:
+                # Fallback: equal weights if no original weights available
+                dynamic_weights = {sym: 1.0/len(available_symbols) for sym in available_symbols}
+        else:
+            # No coins available - use zero weights
+            dynamic_weights = {}
+        
+        # Store dynamic weights for analysis
+        dynamic_weights_history.append({
+            'date': price_data.index[i],
+            'available_coins': len(available_symbols),
+            'weights': dynamic_weights.copy()
+        })
+        
+        # Calculate weighted portfolio return using dynamic weights
+        portfolio_return = 0
+        for symbol in available_symbols:
+            if symbol in daily_returns and symbol in dynamic_weights:
+                portfolio_return += dynamic_weights[symbol] * daily_returns[symbol]
+        
         portfolio_returns.append(portfolio_return)
         portfolio_values.append(portfolio_values[-1] * (1 + portfolio_return))
     
-    # Calculate portfolio metrics
+    # Calculate portfolio metrics with robust error handling
     portfolio_returns = np.array(portfolio_returns)
-    portfolio_total_return = (portfolio_values[-1] / portfolio_values[0]) - 1
-    portfolio_volatility = np.std(portfolio_returns) * np.sqrt(252)
-    portfolio_annualized_return = (portfolio_values[-1] / portfolio_values[0]) ** (252 / len(portfolio_returns)) - 1
-    portfolio_sharpe = (portfolio_annualized_return - 0.02) / portfolio_volatility if portfolio_volatility > 0 else 0
+    
+    # Total return calculation
+    if portfolio_values[0] > 0 and portfolio_values[-1] > 0:
+        portfolio_total_return = (portfolio_values[-1] / portfolio_values[0]) - 1
+    else:
+        portfolio_total_return = 0
+    
+    # Volatility calculation
+    if len(portfolio_returns) > 1 and not np.all(np.isnan(portfolio_returns)):
+        portfolio_volatility = np.nanstd(portfolio_returns) * np.sqrt(252)
+    else:
+        portfolio_volatility = 0
+    
+    # Annualized return calculation with proper error handling
+    if (len(portfolio_returns) > 0 and 
+        portfolio_values[0] > 0 and 
+        portfolio_values[-1] > 0 and
+        not pd.isna(portfolio_values[-1]) and
+        not pd.isna(portfolio_values[0])):
+        
+        time_factor = 252 / len(portfolio_returns)  # Convert to annual
+        value_ratio = portfolio_values[-1] / portfolio_values[0]
+        
+        # Ensure value_ratio is positive for power calculation
+        if value_ratio > 0:
+            portfolio_annualized_return = (value_ratio ** time_factor) - 1
+        else:
+            portfolio_annualized_return = portfolio_total_return  # Fallback to total return
+    else:
+        portfolio_annualized_return = 0
+    
+    # Sharpe ratio calculation
+    if portfolio_volatility > 0 and not pd.isna(portfolio_annualized_return):
+        portfolio_sharpe = (portfolio_annualized_return - 0.02) / portfolio_volatility
+    else:
+        portfolio_sharpe = 0
     
     # Maximum drawdown calculation
     portfolio_values_series = pd.Series(portfolio_values)
@@ -3208,47 +3633,244 @@ else:  # Portfolio Analysis
     
     # Display portfolio metrics
     st.subheader("Your Portfolio Performance")
+    
+    # Check for data quality issues
+    if len(portfolio_returns) < 30:
+        st.warning("Limited data available - metrics may be less reliable for very short periods.")
+    
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("Total Return", f"{portfolio_total_return:.1%}")
+        if pd.isna(portfolio_total_return) or np.isinf(portfolio_total_return):
+            st.metric("Total Return", "N/A", help="Unable to calculate due to data issues")
+        else:
+            st.metric("Total Return", f"{portfolio_total_return:.1%}")
     
     with col2:
-        st.metric("Annualized Volatility", f"{portfolio_volatility:.1%}")
+        if pd.isna(portfolio_volatility) or np.isinf(portfolio_volatility):
+            st.metric("Annualized Volatility", "N/A", help="Unable to calculate due to data issues")
+        else:
+            st.metric("Annualized Volatility", f"{portfolio_volatility:.1%}")
     
     with col3:
-        st.metric("Sharpe Ratio", f"{portfolio_sharpe:.2f}")
+        if pd.isna(portfolio_sharpe) or np.isinf(portfolio_sharpe):
+            st.metric("Sharpe Ratio", "N/A", help="Unable to calculate due to data issues")
+        else:
+            st.metric("Sharpe Ratio", f"{portfolio_sharpe:.2f}")
     
     with col4:
-        st.metric("Max Drawdown", f"{max_drawdown:.1%}")
+        if pd.isna(max_drawdown) or np.isinf(max_drawdown):
+            st.metric("Max Drawdown", "N/A", help="Unable to calculate due to data issues")
+        else:
+            st.metric("Max Drawdown", f"{max_drawdown:.1%}")
+    
+    # Additional portfolio metrics row
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        if pd.isna(portfolio_annualized_return) or np.isinf(portfolio_annualized_return):
+            st.metric("Annualized Return", "N/A", help="Unable to calculate due to data issues")
+        else:
+            st.metric("Annualized Return", f"{portfolio_annualized_return:.1%}")
+    
+    with col2:
+        # Add number of trading days for reference
+        st.metric("Trading Days", f"{len(portfolio_returns)}")
+    
+    with col3:
+        # Add start and end values for context
+        st.metric("Portfolio Growth", f"${portfolio_values[0]:,.0f} → ${portfolio_values[-1]:,.0f}")
+    
+    with col4:
+        # Add data quality indicator
+        missing_data_pct = np.sum(np.isnan(portfolio_returns)) / len(portfolio_returns) * 100 if len(portfolio_returns) > 0 else 0
+        if missing_data_pct > 5:
+            st.metric("Data Quality", f"{100-missing_data_pct:.0f}%", delta="Some gaps")
+        else:
+            st.metric("Data Quality", f"{100-missing_data_pct:.0f}%", delta="Good")
+    
+    # Dynamic weights and coin launch analysis
+    if coin_launch_info:
+        st.subheader("Coin Launch Timeline & Dynamic Weights")
+        
+        # Show coin launch dates
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("**Coin Availability Timeline:**")
+            launch_data = []
+            for symbol, info in coin_launch_info.items():
+                availability_date = info['date']
+                availability_type = info['type']
+                analysis_start = price_data.index[0].strftime('%Y-%m-%d')
+                
+                if availability_type == 'pre-existing':
+                    # Coin was already available at start of analysis
+                    status = f"Available from start"
+                    note = f"(Launched before {analysis_start})"
+                    days_after = "Pre-existing"
+                else:
+                    # Coin launched during analysis period
+                    days_since_start = (pd.to_datetime(availability_date) - price_data.index[0]).days
+                    status = f"Launched {availability_date}"
+                    note = f"({days_since_start} days after start)"
+                    days_after = f"Day {days_since_start}"
+                
+                launch_data.append({
+                    'Cryptocurrency': symbol.replace('-USD', ''),
+                    'Availability Status': status,
+                    'Timeline': days_after,
+                    'Note': note
+                })
+            
+            if launch_data:
+                launch_df = pd.DataFrame(launch_data)
+                st.dataframe(launch_df, hide_index=True, use_container_width=True)
+                
+                # Add explanatory note
+                st.caption("**Note**: For pre-existing coins, we only know they launched before the analysis start date, not their actual launch date.")
+        
+        with col2:
+            st.markdown("**Weight Redistribution Summary:**")
+            
+            # Show how weights evolved over time
+            if dynamic_weights_history:
+                # Get initial and final weights for comparison
+                initial_weights = dynamic_weights_history[0]['weights'] if dynamic_weights_history else {}
+                final_weights = dynamic_weights_history[-1]['weights'] if dynamic_weights_history else {}
+                
+                weight_evolution = []
+                for symbol in selected_symbols:
+                    initial_weight = initial_weights.get(symbol, 0) * 100
+                    final_weight = final_weights.get(symbol, 0) * 100
+                    original_weight = normalized_weights[symbol] * 100
+                    
+                    weight_evolution.append({
+                        'Crypto': symbol.replace('-USD', ''),
+                        'Target %': f"{original_weight:.1f}%",
+                        'Initial %': f"{initial_weight:.1f}%",
+                        'Final %': f"{final_weight:.1f}%"
+                    })
+                
+                weight_df = pd.DataFrame(weight_evolution)
+                st.dataframe(weight_df, hide_index=True, use_container_width=True)
+        
+        # Show dynamic weights over time
+        if len(dynamic_weights_history) > 1:
+            st.markdown("**Dynamic Weight Adjustment Over Time:**")
+            
+            # Create chart showing number of available coins over time
+            dates = [entry['date'] for entry in dynamic_weights_history]
+            available_coins = [entry['available_coins'] for entry in dynamic_weights_history]
+            
+            fig_coins = go.Figure()
+            fig_coins.add_trace(go.Scatter(
+                x=dates,
+                y=available_coins,
+                mode='lines',
+                name='Available Coins',
+                line=dict(color='#1f77b4', width=2),
+                fill='tonexty'
+            ))
+            
+            fig_coins.update_layout(
+                title="Number of Available Cryptocurrencies Over Time",
+                xaxis_title="Date",
+                yaxis_title="Number of Available Coins",
+                height=300,
+                template='plotly_dark' if st.session_state.theme == 'dark' else 'plotly_white'
+            )
+            
+            st.plotly_chart(fig_coins, use_container_width=True)
+            
+            # Explanation
+            total_coins = len(selected_symbols)
+            coins_available_at_start = available_coins[0] if available_coins else 0
+            coins_launched_during_period = total_coins - coins_available_at_start
+            
+            if coins_launched_during_period > 0:
+                st.info(f"""
+                **Dynamic Weight Adjustment Applied:**
+                - Started with {coins_available_at_start}/{total_coins} available cryptocurrencies
+                - {coins_launched_during_period} cryptocurrencies became available during the analysis period
+                - Weights were automatically redistributed as new coins became available
+                - This prevents NaN values from unavailable cryptocurrencies
+                """)
+            else:
+                st.success("All selected cryptocurrencies were available throughout the entire analysis period")
     
     # Price charts
-    st.subheader("Price Performance")
+    col_header, col_toggle = st.columns([3, 1])
     
-    # Normalize prices to 100 for comparison
-    normalized_prices = (price_data / price_data.iloc[0] * 100)
+    with col_header:
+        st.subheader("Price Performance")
     
+    with col_toggle:
+        st.write("")  # Spacer
+        price_view_mode = st.selectbox(
+            "View Mode",
+            ["Normalized", "Raw Price"],
+            key="price_view_mode",
+            help="Switch between normalized comparison (base=100) and actual price values"
+        )
+    
+    # Create price chart based on selected mode
     fig = go.Figure()
     colors = ['#5ac53a', '#e85555', '#00ff88', '#f7931a', '#627eea']
     
-    for i, symbol in enumerate(selected_symbols):
-        fig.add_trace(go.Scatter(
-            x=normalized_prices.index,
-            y=normalized_prices[symbol],
-            name=symbol.replace('-USD', ''),
-            line=dict(color=colors[i % len(colors)], width=2),
-            mode='lines'
-        ))
+    if price_view_mode == "Normalized":
+        # Normalize prices to 100 for comparison
+        chart_data = (price_data / price_data.iloc[0] * 100)
+        chart_title = "Normalized Price Performance (Base = 100)"
+        y_axis_title = "Normalized Price"
+        
+        for i, symbol in enumerate(selected_symbols):
+            fig.add_trace(go.Scatter(
+                x=chart_data.index,
+                y=chart_data[symbol],
+                name=symbol.replace('-USD', ''),
+                line=dict(color=colors[i % len(colors)], width=2),
+                mode='lines',
+                hovertemplate=f'<b>{symbol.replace("-USD", "")}</b><br>' +
+                             'Date: %{x}<br>' +
+                             'Normalized Price: %{y:.1f}<br>' +
+                             '<extra></extra>'
+            ))
+    else:  # Raw Price mode
+        chart_data = price_data
+        chart_title = "Raw Price Performance (USD)"
+        y_axis_title = "Price (USD)"
+        
+        for i, symbol in enumerate(selected_symbols):
+            fig.add_trace(go.Scatter(
+                x=chart_data.index,
+                y=chart_data[symbol],
+                name=symbol.replace('-USD', ''),
+                line=dict(color=colors[i % len(colors)], width=2),
+                mode='lines',
+                hovertemplate=f'<b>{symbol.replace("-USD", "")}</b><br>' +
+                             'Date: %{x}<br>' +
+                             'Price: $%{y:,.2f}<br>' +
+                             '<extra></extra>'
+            ))
     
+    # Update layout
     fig.update_layout(
-        title="Normalized Price Performance (Base = 100)",
+        title=chart_title,
         xaxis_title="Date",
-        yaxis_title="Normalized Price",
+        yaxis_title=y_axis_title,
         hovermode='x unified',
         height=400,
         template='plotly_dark' if st.session_state.theme == 'dark' else 'plotly_white'
     )
+    
     st.plotly_chart(fig, use_container_width=True, hide_index=True)
+    
+    # Add explanation based on mode
+    if price_view_mode == "Normalized":
+        st.info("**Normalized View**: All prices start at 100 for easy performance comparison regardless of actual price levels.")
+    else:
+        st.info("**Raw Price View**: Shows actual USD prices. Note: Cryptocurrencies with very different price levels may be hard to compare on the same scale.")
     
     # Returns distribution and correlation
     col1, col2 = st.columns(2)
