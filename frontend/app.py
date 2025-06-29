@@ -173,7 +173,7 @@ def apply_theme_css(theme):
         background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%) !important;
         color: var(--apple-text-primary) !important;
         border: 1px solid var(--apple-border) !important;
-        border-radius: 22px !important;
+        border-radius: var(--apple-radius-lg) !important;
         padding: 12px 32px !important;
         font-weight: 500 !important;
         font-size: 17px !important;
@@ -221,7 +221,7 @@ def apply_theme_css(theme):
         background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%) !important;
         color: var(--apple-text-primary) !important;
         border: 1px solid var(--apple-border) !important;
-        border-radius: 22px !important;
+        border-radius: var(--apple-radius-lg) !important;
         padding: 12px 32px !important;
         font-weight: 500 !important;
         font-size: 17px !important;
@@ -277,6 +277,16 @@ def apply_theme_css(theme):
         padding: 8px 12px;
     }
     
+    .stTextInput > div > div > input {
+        background: var(--apple-card-bg);
+        border: 1px solid var(--apple-border);
+        border-radius: var(--apple-radius);
+        font-size: 17px;
+        min-height: 44px;
+        padding: 8px 12px;
+        color: var(--apple-text-primary);
+    }
+    
     /* Style multiselect selected items with white background */
     .stMultiSelect div[data-baseweb="tag"],
     .stMultiSelect > div > div > div[data-baseweb="tag"],
@@ -284,8 +294,8 @@ def apply_theme_css(theme):
         background-color: white !important;
         background: white !important;
         color: #050f19 !important;
-        border: 1px solid var(--cb-border) !important;
-        border-radius: 4px !important;
+        border: 1px solid var(--apple-border) !important;
+        border-radius: var(--apple-radius) !important;
     }
     
     .stMultiSelect div[data-baseweb="tag"] span,
@@ -329,12 +339,12 @@ def apply_theme_css(theme):
         color: #050f19 !important;
     }
     
-    /* Apple-style tables with fully transparent backgrounds and visible lines */
+    /* Apple-style clean tables - no grid, minimal lines */
     .stDataFrame {
         background: transparent !important;
         box-shadow: none !important;
         border-radius: var(--apple-radius-lg);
-        border: 2px solid var(--apple-border);
+        border: none !important;
         overflow: hidden;
     }
     
@@ -342,51 +352,74 @@ def apply_theme_css(theme):
         background: transparent !important;
         color: var(--apple-text-primary) !important;
         font-size: 17px !important;
+        border-collapse: separate !important;
+        border-spacing: 0 !important;
+        border-radius: inherit !important;
     }
     
     .stDataFrame th {
         background: transparent !important;
         color: var(--apple-text-secondary) !important;
-        font-weight: 600 !important;
+        font-weight: 500 !important;
         font-size: 15px !important;
         letter-spacing: -0.022em;
-        border-bottom: 2px solid var(--apple-border) !important;
-        border-right: 1px solid rgba(210, 210, 215, 0.5) !important;
-        padding: 16px 12px !important;
+        border: none !important;
+        border-bottom: none !important;
+        padding: 20px 24px !important;
+        text-align: left !important;
     }
     
     .stDataFrame td {
         background: transparent !important;
         color: var(--apple-text-primary) !important;
-        border-bottom: 1px solid rgba(210, 210, 215, 0.8) !important;
-        border-right: 1px solid rgba(210, 210, 215, 0.4) !important;
-        padding: 16px 12px !important;
+        border: none !important;
+        padding: 16px 24px !important;
         font-feature-settings: 'tnum';
+        font-weight: 400 !important;
     }
     
+    /* Ensure proper corner rounding for header cells */
+    .stDataFrame th:first-child {
+        border-top-left-radius: var(--apple-radius-lg) !important;
+    }
+    
+    .stDataFrame th:last-child {
+        border-top-right-radius: var(--apple-radius-lg) !important;
+    }
+    
+    /* Zebra striping - subtle alternating row backgrounds */
+    .stDataFrame tbody tr:nth-child(even) td {
+        background: rgba(248, 249, 250, 0.3) !important;
+    }
+    
+    .stDataFrame tbody tr:nth-child(odd) td {
+        background: transparent !important;
+    }
+    
+    /* Hover state - very subtle */
     .stDataFrame tr:hover td {
-        background: rgba(240, 240, 240, 0.3) !important;
+        background: rgba(0, 122, 255, 0.04) !important;
     }
     
-    /* Remove the last column border */
-    .stDataFrame th:last-child,
-    .stDataFrame td:last-child {
-        border-right: none !important;
-    }
-    
-    /* Strengthen row separators */
+    /* No row separators - clean table */
     .stDataFrame tbody tr {
-        border-bottom: 1px solid rgba(210, 210, 215, 0.6) !important;
+        border-bottom: none !important;
     }
     
-    /* Ensure table text remains highly visible with better contrast */
-    .stDataFrame td, .stDataFrame th {
-        text-shadow: none !important;
+    .stDataFrame tbody tr:last-child {
+        border-bottom: none !important;
+    }
+    
+    /* First column styling for row headers */
+    .stDataFrame td:first-child {
         font-weight: 500 !important;
+        color: var(--apple-text-primary) !important;
     }
     
-    .stDataFrame th {
-        font-weight: 600 !important;
+    /* Number formatting for better readability */
+    .stDataFrame td[data-type="number"] {
+        text-align: right !important;
+        font-variant-numeric: tabular-nums !important;
     }
     
     /* Financial data styling */
@@ -568,7 +601,7 @@ def apply_theme_css(theme):
     code {
         background: var(--apple-secondary-bg) !important;
         border: 1px solid var(--apple-border) !important;
-        border-radius: 8px !important;
+        border-radius: var(--apple-radius) !important;
         padding: 2px 6px !important;
         font-size: 15px !important;
     }
@@ -772,7 +805,7 @@ observer.observe(document.body, { childList: true, subtree: true });
     }
     
     .css-1d391kg .stMultiSelect > div > div {
-        background: var(--cb-secondary-bg) !important;
+        background: var(--cb-card-bg) !important;
         border: 1px solid var(--cb-border) !important;
         color: var(--cb-text-primary) !important;
         border-radius: var(--cb-radius);
@@ -858,6 +891,14 @@ observer.observe(document.body, { childList: true, subtree: true });
         font-size: 0.875rem;
     }
     
+    .stTextInput > div > div > input {
+        background: var(--cb-card-bg);
+        border: 1px solid var(--cb-border);
+        border-radius: var(--cb-radius);
+        font-size: 0.875rem;
+        color: var(--cb-text-primary);
+    }
+    
     .stSlider > div > div > div {
         background: var(--cb-blue);
     }
@@ -899,7 +940,7 @@ observer.observe(document.body, { childList: true, subtree: true });
         background: var(--cb-card-bg) !important;
         box-shadow: var(--cb-shadow);
         border-radius: var(--cb-radius-lg);
-        border: 1px solid var(--cb-border);
+        border: none;
         overflow: hidden;
     }
     
@@ -907,6 +948,9 @@ observer.observe(document.body, { childList: true, subtree: true });
         background: transparent !important;
         color: var(--cb-text-primary) !important;
         font-size: 0.875rem !important;
+        border-collapse: separate !important;
+        border-spacing: 0 !important;
+        border-radius: inherit !important;
     }
     
     .stDataFrame th {
@@ -916,16 +960,25 @@ observer.observe(document.body, { childList: true, subtree: true });
         font-size: 0.75rem !important;
         text-transform: uppercase;
         letter-spacing: 0.5px;
-        border-bottom: 1px solid var(--cb-border) !important;
+        border-bottom: none !important;
         padding: 1rem 0.75rem !important;
     }
     
     .stDataFrame td {
         background: transparent !important;
         color: var(--cb-text-primary) !important;
-        border-bottom: 1px solid var(--cb-border) !important;
+        border-bottom: none !important;
         padding: 1rem 0.75rem !important;
         font-feature-settings: 'tnum';
+    }
+    
+    /* Ensure proper corner rounding for header cells */
+    .stDataFrame th:first-child {
+        border-top-left-radius: var(--cb-radius-lg) !important;
+    }
+    
+    .stDataFrame th:last-child {
+        border-top-right-radius: var(--cb-radius-lg) !important;
     }
     
     .stDataFrame tr:hover td {
@@ -1057,6 +1110,23 @@ observer.observe(document.body, { childList: true, subtree: true });
     .stMultiSelect span {
         font-size: 14px !important;
     }
+    
+    /* Style multiselect selected items (tags) for dark theme */
+    .stMultiSelect div[data-baseweb="tag"],
+    .stMultiSelect > div > div > div[data-baseweb="tag"],
+    div[data-baseweb="tag"] {
+        background-color: var(--cb-card-bg) !important;
+        background: var(--cb-card-bg) !important;
+        color: var(--cb-text-primary) !important;
+        border: 1px solid var(--cb-border) !important;
+        border-radius: var(--cb-radius) !important;
+    }
+    
+    .stMultiSelect div[data-baseweb="tag"] span,
+    .stMultiSelect > div > div > div[data-baseweb="tag"] span,
+    div[data-baseweb="tag"] span {
+        color: var(--cb-text-primary) !important;
+    }
 </style>
 """
 
@@ -1094,7 +1164,6 @@ st.markdown("""
     </p>
 </div>
 """, unsafe_allow_html=True)
-st.markdown("**Live Demonstration** - Advanced portfolio optimization and backtesting for cryptocurrencies")
 
 # Sidebar
 st.sidebar.markdown("""
