@@ -34,41 +34,53 @@ from enhanced_crypto_loader import EnhancedCryptoLoader
 if 'theme' not in st.session_state:
     st.session_state.theme = 'light'
 
+# Helper function to add transparent background to all plots
+def make_plot_transparent(fig):
+    """Add transparent background to plotly figures for Apple-style integration"""
+    fig.update_layout(
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)'
+    )
+    return fig
+
 # Apply theme-specific CSS (Coinbase-inspired)
 def apply_theme_css(theme):
     if theme == 'light':
         return """
 <style>
-    /* Import Coinbase Sans font family */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    /* Import Apple-style system fonts */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
     
-    /* Coinbase Light Mode Variables */
+    /* Apple-inspired Light Mode Variables */
     :root {
-        --cb-primary-bg: #ffffff;
-        --cb-secondary-bg: #f8f9fa;
-        --cb-card-bg: #ffffff;
-        --cb-hover-bg: #f0f2f5;
-        --cb-border: #e6e8ea;
-        --cb-text-primary: #050f19;
-        --cb-text-secondary: #5b616e;
-        --cb-text-tertiary: #8a919e;
-        --cb-blue: #1652f0;
-        --cb-green: #00d395;
-        --cb-red: #fa3c58;
-        --cb-orange: #ff9500;
-        --cb-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        --cb-shadow-hover: 0 4px 16px rgba(0, 0, 0, 0.15);
-        --cb-radius: 8px;
-        --cb-radius-lg: 12px;
+        --apple-bg: #ffffff;
+        --apple-secondary-bg: #f5f5f7;
+        --apple-card-bg: #ffffff;
+        --apple-hover-bg: #f0f0f0;
+        --apple-border: #d2d2d7;
+        --apple-text-primary: #1d1d1f;
+        --apple-text-secondary: #6e6e73;
+        --apple-text-tertiary: #86868b;
+        --apple-blue: #007aff;
+        --apple-green: #30d158;
+        --apple-red: #ff453a;
+        --apple-orange: #ff9f0a;
+        --apple-shadow: 0 2px 16px rgba(0, 0, 0, 0.1);
+        --apple-shadow-card: 0 4px 20px rgba(0, 0, 0, 0.08);
+        --apple-radius: 12px;
+        --apple-radius-lg: 16px;
     }
     
-    /* Global Coinbase Light Theme */
+    /* Global Apple-style Light Theme */
     .stApp {
-        font-family: 'Inter', 'Coinbase Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        background: var(--cb-secondary-bg);
-        color: var(--cb-text-primary);
+        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', system-ui, sans-serif;
+        background: var(--apple-secondary-bg);
+        color: var(--apple-text-primary);
         font-feature-settings: 'tnum';
-        font-size: 16px;
+        font-size: 17px;
+        font-weight: 400;
+        line-height: 1.47;
+        letter-spacing: -0.022em;
     }
     
     /* Hide Streamlit branding */
@@ -77,43 +89,45 @@ def apply_theme_css(theme):
     header {visibility: hidden;}
     .stDeployButton {display: none;}
     
-    /* Coinbase-style main container */
+    /* Apple-style main container */
     .main .block-container {
-        padding: 1.5rem 2rem;
-        max-width: 1200px;
+        padding: 2rem 3rem;
+        max-width: 1240px;
         margin: 0 auto;
         width: 100%;
         box-sizing: border-box;
     }
     
-    /* Simple, stable sidebar styling */
+    /* Apple-style sidebar */
     [data-testid="stSidebar"] {
-        background: var(--cb-card-bg) !important;
-        border-right: 1px solid var(--cb-border) !important;
-        box-shadow: var(--cb-shadow);
+        background: var(--apple-secondary-bg) !important;
+        border-right: 1px solid var(--apple-border) !important;
+        box-shadow: none !important;
     }
     
     [data-testid="stSidebar"] > div {
-        background: var(--cb-card-bg) !important;
-        padding: 1rem !important;
+        background: var(--apple-secondary-bg) !important;
+        padding: 1.5rem !important;
     }
     
     [data-testid="stSidebar"] label {
-        color: var(--cb-text-primary) !important;
+        color: var(--apple-text-primary) !important;
         font-weight: 500 !important;
-        font-size: 0.875rem !important;
+        font-size: 15px !important;
     }
     
     [data-testid="stSidebar"] h1, 
     [data-testid="stSidebar"] h2, 
     [data-testid="stSidebar"] h3 {
-        color: var(--cb-text-primary) !important;
+        color: var(--apple-text-primary) !important;
         font-weight: 600 !important;
+        letter-spacing: -0.022em;
     }
     
     [data-testid="stSidebar"] p {
-        color: var(--cb-text-secondary) !important;
-        font-size: 0.875rem !important;
+        color: var(--apple-text-secondary) !important;
+        font-size: 15px !important;
+        line-height: 1.5;
     }
     
     /* Adaptive main content for wide layout */
@@ -123,73 +137,144 @@ def apply_theme_css(theme):
         padding: 1rem 2rem !important;
     }
     
-    /* Coinbase-style buttons */
+    /* Apple-style buttons */
     .stButton > button {
-        background: var(--cb-blue);
+        background: var(--apple-blue);
         color: white;
         border: none;
-        border-radius: var(--cb-radius);
-        padding: 0.75rem 1.5rem;
-        font-weight: 600;
-        font-size: 0.875rem;
-        transition: all 0.2s ease;
-        box-shadow: none;
+        border-radius: var(--apple-radius);
+        padding: 12px 24px;
+        font-weight: 500;
+        font-size: 17px;
+        transition: all 0.15s ease;
+        box-shadow: var(--apple-shadow);
         text-transform: none;
-        letter-spacing: normal;
+        letter-spacing: -0.022em;
+        min-height: 44px;
     }
     
     .stButton > button:hover {
-        background: #1347cc;
-        transform: none;
-        box-shadow: var(--cb-shadow-hover);
+        background: #0056d6;
+        transform: translateY(-1px);
+        box-shadow: var(--apple-shadow-card);
     }
     
     .stButton > button:focus {
-        box-shadow: 0 0 0 3px rgba(22, 82, 240, 0.1);
+        box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.25);
         outline: none;
     }
     
-    /* Coinbase-style inputs */
+    /* Primary button styling (for Optimize Portfolio button) - Clean Apple style */
+    button[kind="primary"],
+    button[data-testid="baseButton-primary"],
+    .stButton > button[kind="primary"],
+    .stButton > button[data-baseweb="button"][kind="primary"],
+    .stButton button[data-testid="baseButton-primary"] {
+        background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%) !important;
+        color: var(--apple-text-primary) !important;
+        border: 1px solid var(--apple-border) !important;
+        border-radius: 22px !important;
+        padding: 12px 32px !important;
+        font-weight: 500 !important;
+        font-size: 17px !important;
+        transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.05) !important;
+        text-transform: none !important;
+        letter-spacing: -0.022em !important;
+        min-height: 44px !important;
+        position: relative !important;
+        overflow: hidden !important;
+    }
+    
+    button[kind="primary"]:hover,
+    button[data-testid="baseButton-primary"]:hover,
+    .stButton > button[kind="primary"]:hover,
+    .stButton > button[data-baseweb="button"][kind="primary"]:hover,
+    .stButton button[data-testid="baseButton-primary"]:hover {
+        background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%) !important;
+        border-color: #c6c7c8 !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
+        transform: translateY(-1px) !important;
+    }
+    
+    button[kind="primary"]:active,
+    button[data-testid="baseButton-primary"]:active,
+    .stButton > button[kind="primary"]:active,
+    .stButton > button[data-baseweb="button"][kind="primary"]:active,
+    .stButton button[data-testid="baseButton-primary"]:active {
+        background: linear-gradient(180deg, #e9ecef 0%, #dee2e6 100%) !important;
+        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1) !important;
+        transform: translateY(0px) !important;
+    }
+    
+    button[kind="primary"]:focus,
+    button[data-testid="baseButton-primary"]:focus,
+    .stButton > button[kind="primary"]:focus,
+    .stButton > button[data-baseweb="button"][kind="primary"]:focus,
+    .stButton button[data-testid="baseButton-primary"]:focus {
+        box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.3), 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+        outline: none !important;
+    }
+    
+    /* Additional primary button overrides for any missed selectors */
+    .stButton button[style*="background-color"] {
+        background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%) !important;
+        color: var(--apple-text-primary) !important;
+        border: 1px solid var(--apple-border) !important;
+        border-radius: 22px !important;
+        padding: 12px 32px !important;
+        font-weight: 500 !important;
+        font-size: 17px !important;
+        letter-spacing: -0.022em !important;
+    }
+    
+    /* Apple-style inputs */
     .stSelectbox > div > div {
-        background: var(--cb-card-bg);
-        border: 1px solid var(--cb-border);
-        border-radius: var(--cb-radius);
-        transition: all 0.2s ease;
-        font-size: 0.875rem;
+        background: var(--apple-card-bg);
+        border: 1px solid var(--apple-border);
+        border-radius: var(--apple-radius);
+        transition: all 0.15s ease;
+        font-size: 17px;
+        min-height: 44px;
     }
     
     .stSelectbox > div > div:focus-within {
-        border-color: var(--cb-blue);
-        box-shadow: 0 0 0 3px rgba(22, 82, 240, 0.1);
+        border-color: var(--apple-blue);
+        box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.25);
     }
     
     .stNumberInput > div > div > input {
-        background: var(--cb-card-bg);
-        border: 1px solid var(--cb-border);
-        border-radius: var(--cb-radius);
-        transition: all 0.2s ease;
-        font-size: 0.875rem;
+        background: var(--apple-card-bg);
+        border: 1px solid var(--apple-border);
+        border-radius: var(--apple-radius);
+        transition: all 0.15s ease;
+        font-size: 17px;
         font-feature-settings: 'tnum';
+        min-height: 44px;
+        padding: 8px 12px;
     }
     
     .stNumberInput > div > div > input:focus {
-        border-color: var(--cb-blue);
-        box-shadow: 0 0 0 3px rgba(22, 82, 240, 0.1);
+        border-color: var(--apple-blue);
+        box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.25);
         outline: none;
     }
     
     .stMultiSelect > div > div {
-        background: var(--cb-card-bg);
-        border: 1px solid var(--cb-border);
-        border-radius: var(--cb-radius);
-        font-size: 0.875rem;
+        background: var(--apple-card-bg);
+        border: 1px solid var(--apple-border);
+        border-radius: var(--apple-radius);
+        font-size: 17px;
+        min-height: 44px;
     }
     
     .stDateInput > div > div > input {
-        background: var(--cb-card-bg);
-        border: 1px solid var(--cb-border);
-        border-radius: var(--cb-radius);
-        font-size: 0.875rem;
+        background: var(--apple-card-bg);
+        border: 1px solid var(--apple-border);
+        border-radius: var(--apple-radius);
+        font-size: 17px;
+        min-height: 44px;
+        padding: 8px 12px;
     }
     
     /* Style multiselect selected items with white background */
@@ -244,83 +329,106 @@ def apply_theme_css(theme):
         color: #050f19 !important;
     }
     
-    /* Coinbase-style tables */
+    /* Apple-style tables with fully transparent backgrounds and visible lines */
     .stDataFrame {
-        background: var(--cb-card-bg) !important;
-        box-shadow: var(--cb-shadow);
-        border-radius: var(--cb-radius-lg);
-        border: 1px solid var(--cb-border);
+        background: transparent !important;
+        box-shadow: none !important;
+        border-radius: var(--apple-radius-lg);
+        border: 2px solid var(--apple-border);
         overflow: hidden;
     }
     
     .stDataFrame table {
         background: transparent !important;
-        color: var(--cb-text-primary) !important;
-        font-size: 0.875rem !important;
+        color: var(--apple-text-primary) !important;
+        font-size: 17px !important;
     }
     
     .stDataFrame th {
-        background: var(--cb-secondary-bg) !important;
-        color: var(--cb-text-secondary) !important;
+        background: transparent !important;
+        color: var(--apple-text-secondary) !important;
         font-weight: 600 !important;
-        font-size: 0.75rem !important;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        border-bottom: 1px solid var(--cb-border) !important;
-        padding: 1rem 0.75rem !important;
+        font-size: 15px !important;
+        letter-spacing: -0.022em;
+        border-bottom: 2px solid var(--apple-border) !important;
+        border-right: 1px solid rgba(210, 210, 215, 0.5) !important;
+        padding: 16px 12px !important;
     }
     
     .stDataFrame td {
         background: transparent !important;
-        color: var(--cb-text-primary) !important;
-        border-bottom: 1px solid var(--cb-border) !important;
-        padding: 1rem 0.75rem !important;
+        color: var(--apple-text-primary) !important;
+        border-bottom: 1px solid rgba(210, 210, 215, 0.8) !important;
+        border-right: 1px solid rgba(210, 210, 215, 0.4) !important;
+        padding: 16px 12px !important;
         font-feature-settings: 'tnum';
     }
     
     .stDataFrame tr:hover td {
-        background: var(--cb-hover-bg) !important;
+        background: rgba(240, 240, 240, 0.3) !important;
+    }
+    
+    /* Remove the last column border */
+    .stDataFrame th:last-child,
+    .stDataFrame td:last-child {
+        border-right: none !important;
+    }
+    
+    /* Strengthen row separators */
+    .stDataFrame tbody tr {
+        border-bottom: 1px solid rgba(210, 210, 215, 0.6) !important;
+    }
+    
+    /* Ensure table text remains highly visible with better contrast */
+    .stDataFrame td, .stDataFrame th {
+        text-shadow: none !important;
+        font-weight: 500 !important;
+    }
+    
+    .stDataFrame th {
+        font-weight: 600 !important;
     }
     
     /* Financial data styling */
     .positive-value {
-        color: var(--cb-green) !important;
+        color: var(--apple-green) !important;
         font-weight: 600 !important;
     }
     
     .negative-value {
-        color: var(--cb-red) !important;
+        color: var(--apple-red) !important;
         font-weight: 600 !important;
     }
     
-    /* Metric cards */
+    /* Apple-style metric cards */
     .stMetric {
-        background: var(--cb-card-bg);
-        padding: 1.5rem;
-        border-radius: var(--cb-radius-lg);
-        box-shadow: var(--cb-shadow);
-        border: 1px solid var(--cb-border);
-        transition: all 0.2s ease;
+        background: var(--apple-card-bg);
+        padding: 20px;
+        border-radius: var(--apple-radius-lg);
+        box-shadow: var(--apple-shadow-card);
+        border: 1px solid var(--apple-border);
+        transition: all 0.15s ease;
     }
     
     .stMetric:hover {
-        box-shadow: var(--cb-shadow-hover);
-        transform: translateY(-1px);
+        box-shadow: var(--apple-shadow-card);
+        transform: translateY(-2px);
     }
     
     .stMetric [data-testid="metric-value"] {
-        font-size: 1.5rem !important;
-        font-weight: 700 !important;
-        color: var(--cb-text-primary) !important;
+        font-size: 28px !important;
+        font-weight: 600 !important;
+        color: var(--apple-text-primary) !important;
         font-feature-settings: 'tnum';
+        letter-spacing: -0.022em;
     }
     
     .stMetric [data-testid="metric-label"] {
-        font-size: 0.75rem !important;
+        font-size: 15px !important;
         font-weight: 500 !important;
-        color: var(--cb-text-secondary) !important;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
+        color: var(--apple-text-secondary) !important;
+        letter-spacing: -0.022em;
+        margin-bottom: 4px;
     }
     
     /* Alerts */
@@ -420,6 +528,72 @@ def apply_theme_css(theme):
         .main .block-container {
             padding: 3rem 6rem !important;
         }
+    }
+    
+    /* Apple-style headings */
+    h1, h2, h3, h4, h5, h6 {
+        color: var(--apple-text-primary) !important;
+        font-weight: 600 !important;
+        letter-spacing: -0.022em !important;
+        line-height: 1.2 !important;
+        margin-top: 2rem !important;
+        margin-bottom: 1rem !important;
+    }
+    
+    h1 {
+        font-size: 48px !important;
+        font-weight: 700 !important;
+        letter-spacing: -0.025em !important;
+    }
+    
+    h2 {
+        font-size: 36px !important;
+        font-weight: 600 !important;
+    }
+    
+    h3 {
+        font-size: 24px !important;
+        font-weight: 600 !important;
+    }
+    
+    /* Apple-style paragraphs */
+    p {
+        color: var(--apple-text-secondary) !important;
+        font-size: 17px !important;
+        line-height: 1.47 !important;
+        letter-spacing: -0.022em !important;
+    }
+    
+    /* Code blocks */
+    code {
+        background: var(--apple-secondary-bg) !important;
+        border: 1px solid var(--apple-border) !important;
+        border-radius: 8px !important;
+        padding: 2px 6px !important;
+        font-size: 15px !important;
+    }
+    
+    /* Transparent plot backgrounds */
+    .stPlotlyChart > div > div {
+        background: transparent !important;
+    }
+    
+    .stPlotlyChart {
+        background: transparent !important;
+    }
+    
+    /* Plotly chart container */
+    .js-plotly-plot .plotly {
+        background: transparent !important;
+    }
+    
+    .js-plotly-plot .plotly .main-svg {
+        background: transparent !important;
+    }
+    
+    /* Chart paper background */
+    .plotly .main-svg .bg {
+        fill: transparent !important;
     }
 </style>
 
@@ -910,11 +1084,24 @@ if 'cache_timestamp' not in st.session_state:
     st.session_state.cache_timestamp = None
 
 # Title and description
-st.title("Crypto Portfolio Optimizer & Backtester")
+st.markdown("""
+<div style="text-align: center; padding: 2rem 0;">
+    <h1 style="font-size: 56px; font-weight: 700; letter-spacing: -0.025em; color: var(--apple-text-primary); margin-bottom: 0.5rem;">
+        Crypto Portfolio
+    </h1>
+    <p style="font-size: 24px; font-weight: 300; color: var(--apple-text-secondary); margin-top: 0;">
+        Intelligent cryptocurrency portfolio optimization and analysis.
+    </p>
+</div>
+""", unsafe_allow_html=True)
 st.markdown("**Live Demonstration** - Advanced portfolio optimization and backtesting for cryptocurrencies")
 
 # Sidebar
-st.sidebar.title("Portfolio Configuration")
+st.sidebar.markdown("""
+<h2 style="font-size: 28px; font-weight: 600; letter-spacing: -0.022em; color: var(--apple-text-primary); margin-bottom: 1.5rem;">
+    Portfolio
+</h2>
+""", unsafe_allow_html=True)
 
 # Theme settings removed - using light mode only
 
@@ -1250,20 +1437,41 @@ if mode == "Market Insights":
             
             with col2:
                 # Returns statistics
-                returns_stats = {
-                    'Mean': f"{coin_returns.mean():.4f}",
-                    'Std Dev': f"{coin_returns.std():.4f}",
-                    'Skewness': f"{coin_returns.skew():.2f}",
-                    'Kurtosis': f"{coin_returns.kurtosis():.2f}",
-                    'Min': f"{coin_returns.min():.2%}",
-                    'Max': f"{coin_returns.max():.2%}",
-                    '5th Percentile': f"{coin_returns.quantile(0.05):.2%}",
-                    '95th Percentile': f"{coin_returns.quantile(0.95):.2%}"
-                }
+                # Returns Statistics with Apple-style metrics
+                st.markdown("""
+                <h3 style="font-size: 24px; font-weight: 600; letter-spacing: -0.022em; color: var(--apple-text-primary); margin-top: 2rem; margin-bottom: 1.5rem;">
+                    Returns Statistics
+                </h3>
+                """, unsafe_allow_html=True)
                 
-                st.write("**Returns Statistics**")
-                for stat, value in returns_stats.items():
-                    st.write(f"{stat}: {value}")
+                # Calculate statistics
+                mean_return = coin_returns.mean()
+                std_dev = coin_returns.std()
+                skewness = coin_returns.skew()
+                kurtosis = coin_returns.kurtosis()
+                min_return = coin_returns.min()
+                max_return = coin_returns.max()
+                percentile_5 = coin_returns.quantile(0.05)
+                percentile_95 = coin_returns.quantile(0.95)
+                
+                # Display in metric card grid
+                col1, col2, col3, col4 = st.columns(4)
+                
+                with col1:
+                    st.metric("Daily Mean", f"{mean_return:.4f}")
+                    st.metric("Minimum Return", f"{min_return:.2%}")
+                
+                with col2:
+                    st.metric("Daily Std Dev", f"{std_dev:.4f}")
+                    st.metric("Maximum Return", f"{max_return:.2%}")
+                
+                with col3:
+                    st.metric("Skewness", f"{skewness:.2f}")
+                    st.metric("5th Percentile", f"{percentile_5:.2%}")
+                
+                with col4:
+                    st.metric("Kurtosis", f"{kurtosis:.2f}")
+                    st.metric("95th Percentile", f"{percentile_95:.2%}")
         
         with tab3:
             # Technical indicators
@@ -1443,7 +1651,9 @@ elif mode == "Portfolio Analysis & Backtest":
         font=dict(size=12),
         template='plotly_white',
         showlegend=True,
-        legend=dict(orientation="v", yanchor="middle", y=0.5)
+        legend=dict(orientation="v", yanchor="middle", y=0.5),
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)'
     )
     st.plotly_chart(fig_pie, use_container_width=True)
     
@@ -1625,7 +1835,7 @@ elif mode == "Portfolio Analysis & Backtest":
                             available_symbols.append(symbol)
                     
                     if available_symbols:
-                        available_original_weights = {sym: result['weights'].get(sym, 1.0/len(selected_symbols)) for sym in available_symbols}
+                        available_original_weights = {sym: normalized_weights.get(sym, 1.0/len(selected_symbols)) for sym in available_symbols}
                         total_available_weight = sum(available_original_weights.values())
                         unavailable_weight = 1.0 - total_available_weight
                         
@@ -1731,7 +1941,9 @@ elif mode == "Portfolio Analysis & Backtest":
         xaxis_title="Date",
         yaxis_title="Portfolio Value ($)",
         hovermode='x unified',
-        height=400
+        height=400,
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)'
     )
     st.plotly_chart(backtest_fig, use_container_width=True)
         
@@ -1940,7 +2152,9 @@ elif mode == "Portfolio Optimization":
                 font=dict(size=12),
                 template='plotly_white',
                 showlegend=True,
-                legend=dict(orientation="v", yanchor="middle", y=0.5)
+                legend=dict(orientation="v", yanchor="middle", y=0.5),
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)'
             )
             st.plotly_chart(fig_pie, use_container_width=True)
             
