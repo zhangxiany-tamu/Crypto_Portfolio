@@ -4,12 +4,13 @@ A web application for cryptocurrency portfolio optimization and analysis with ma
 
 ## Features
 
-- **Portfolio Optimization**: Mean-Variance, Risk Parity, Black-Litterman, and Maximum Sharpe algorithms
-- **Machine Learning Predictions**: Random Forest and Linear Regression models with technical indicators
+- **Market Insights**: Price performance analysis, technical indicators, and detailed coin analytics
+- **Portfolio Analysis**: Comprehensive backtesting with customizable weights and rebalancing strategies
+- **Portfolio Optimization**: Maximum Sharpe Ratio, Minimum Variance, and Risk Parity algorithms
+- **Machine Learning Predictions**: Random Forest and Linear Regression models with portfolio forecasts
 - **AI Investment Advisor**: Integration with OpenAI GPT-4, Anthropic Claude, and Google Gemini
-- **Market Analysis**: Correlation matrices, risk-return analysis, and rolling performance metrics
-- **Real-time Data**: Multi-source data fetching from Yahoo Finance, CoinGecko, and Binance
-- **Interactive Visualizations**: Professional charts and analytics
+- **Professional Interface**: Clean, emoji-free design focused on analytical insights
+- **Real-time Data**: Enhanced data loading with local database and API fallback
 
 ## Quick Start
 
@@ -36,40 +37,47 @@ Open your browser to `http://localhost:8501`
 
 ## Usage
 
-### 1. Portfolio Optimization
-- Select cryptocurrencies from the sidebar
-- Choose optimization method and risk tolerance
-- Get optimal portfolio weights and allocations
+### 1. Market Insights
+- View price performance charts with normalized and raw price options
+- Analyze individual cryptocurrencies with detailed metrics
+- Explore technical indicators including RSI and moving averages
+- Review price distributions and returns statistics
 
-### 2. Portfolio Analysis
-- Define custom portfolio weights
-- View performance metrics and risk analysis
-- Analyze correlations and diversification
+### 2. Portfolio Analysis & Backtest
+- Define portfolio weights (automatically uses optimized weights if available)
+- Run comprehensive backtesting with various rebalancing strategies
+- Analyze performance metrics, drawdowns, and risk-adjusted returns
+- Compare against benchmark portfolios
 
-### 3. Machine Learning Predictions
-- Select prediction horizon (1-30 days)
-- Compare Random Forest and Linear Regression models
-- View individual asset and portfolio-level forecasts
+### 3. Portfolio Optimization
+- Choose from Maximum Sharpe Ratio, Minimum Variance, or Risk Parity strategies
+- Set maximum weight constraints for diversification
+- View optimized allocations with immediate weight application
+- Seamlessly transfer optimized weights to other analysis modes
 
-### 4. AI Investment Advisor
-- Configure your current portfolio allocation
-- Get AI-powered investment recommendations
-- Receive precise rebalancing plans with expected returns
+### 4. Machine Learning Predictions
+- Select prediction horizon (1-30 days) for price forecasting
+- Compare Random Forest and Linear Regression model performance
+- View portfolio-level predictions using current or optimized weights
+- Analyze model confidence and prediction accuracy
 
-### 5. Market Insights
-- Explore asset correlations and market trends
-- Analyze risk-return profiles
-- View rolling performance metrics
+### 5. AI Investment Advisor
+- Input your current portfolio allocation
+- Get personalized investment recommendations from multiple AI models
+- Receive detailed analysis of market conditions and portfolio positioning
+- Configure API keys for OpenAI GPT-4, Anthropic Claude, or Google Gemini
 
 ## Supported Assets
 
-**30 cryptocurrencies across major categories:**
+**60+ cryptocurrencies** with 5+ years of historical data, including:
 
-**Top Market Cap:** BTC, ETH, XRP, BNB, SOL, DOGE, ADA, TRX, SHIB, AVAX
+**Major Assets:** BTC, ETH, XRP, BNB, SOL, DOGE, ADA, MATIC, DOT, UNI
 
-**DeFi & Layer 1/2:** LINK, DOT, UNI, AAVE, MATIC, NEAR, ICP, APT, SUI, ATOM
+**DeFi & Smart Contracts:** AAVE, LINK, SUSHI, COMP, MKR, YFI, CRV, SNX
 
-**Established Coins:** LTC, BCH, XLM, XMR, ETC, HBAR, TON, ALGO, VET, FTM
+**Layer 1/2 & Infrastructure:** AVAX, NEAR, ATOM, ICP, APT, SUI, FTM, ALGO
+
+**Additional Coverage:** Extended database includes emerging and established cryptocurrencies
 
 ## AI Integration
 
@@ -83,8 +91,10 @@ To use the AI Investment Advisor, you'll need an API key from:
 ```
 Crypto_Portfolio/
 ├── frontend/app.py              # Main Streamlit application
-├── portfolio_optimizer.py       # Optimization algorithms
+├── portfolio_optimizer.py       # Optimization algorithms  
 ├── robust_data_fetcher.py       # Data fetching utilities
+├── enhanced_crypto_loader.py    # Enhanced data loading with local database
+├── data/crypto_extended.db      # Extended cryptocurrency database
 ├── requirements.txt             # Dependencies
 └── README.md                   # This file
 ```
