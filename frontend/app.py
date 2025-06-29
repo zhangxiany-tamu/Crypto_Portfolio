@@ -1925,19 +1925,6 @@ elif mode == "Portfolio Optimization":
     else:
         st.info("Configure your preferences and click 'Optimize Portfolio' to get started")
     
-    # Enhanced Analytics Information
-    st.subheader("Enhanced Analytics")
-    
-    st.info("For comprehensive backtest results, strategy performance comparisons, and detailed portfolio analytics, please visit our enhanced web application at: **[CryptoPortfolio.live](https://cryptoportfolio.live)**")
-    
-    st.markdown("""
-    ### What you'll find on the full platform:
-    - **Advanced Backtest Results** with detailed performance metrics
-    - **Strategy Performance Comparison** across multiple optimization methods
-    - **Interactive Charts** with customizable timeframes and indicators
-    - **Risk Analytics** including drawdown analysis and volatility metrics
-    - **Portfolio Rebalancing** insights and cost analysis
-    """)
     
 
 elif mode == "Market Insights":
