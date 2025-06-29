@@ -16,7 +16,7 @@ A web application for cryptocurrency portfolio optimization and analysis with ma
 
 ### Live Demo
 
-🌐 **[Try the live application](https://zhangxianyang-crypto-portfolio.share.connect.posit.cloud/)**
+**[Try the live application](https://zhangxianyang-crypto-portfolio.share.connect.posit.cloud/)**
 
 ### Local Installation
 

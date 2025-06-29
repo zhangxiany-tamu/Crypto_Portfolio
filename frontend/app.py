@@ -1570,6 +1570,14 @@ elif mode == "Portfolio Analysis & Backtest":
         return dynamic_weights
     
     equal_weight_values = []
+    btc_hold_values = []
+    
+    # BTC buy & hold calculation (if BTC data is available)
+    btc_initial_shares = 0
+    has_btc_data = 'BTC-USD' in price_data.columns
+    if has_btc_data and not pd.isna(price_data['BTC-USD'].iloc[0]) and price_data['BTC-USD'].iloc[0] > 0:
+        btc_initial_capital = initial_capital * (1 - trading_fee)  # Apply trading fee
+        btc_initial_shares = btc_initial_capital / price_data['BTC-USD'].iloc[0]
     
     for i, date in enumerate(price_data.index):
             if i == 0:
@@ -1591,6 +1599,12 @@ elif mode == "Portfolio Analysis & Backtest":
                                     if not pd.isna(price_data[symbol].iloc[i]) and price_data[symbol].iloc[i] > 0)
                 equal_weight_value = initial_capital
                 rebalance_costs.append(initial_cost)
+                
+                # BTC buy & hold value
+                if has_btc_data and btc_initial_shares > 0:
+                    btc_hold_value = btc_initial_shares * price_data['BTC-USD'].iloc[i]
+                else:
+                    btc_hold_value = initial_capital
             else:
                 # Calculate current portfolio value
                 current_portfolio_value = 0
@@ -1648,24 +1662,34 @@ elif mode == "Portfolio Analysis & Backtest":
                         symbol_return = price_data[symbol].iloc[i] / price_data[symbol].iloc[i-1] - 1
                         equal_weight_return += current_equal_weights[symbol] * symbol_return
                 equal_weight_value = equal_weight_values[-1] * (1 + equal_weight_return)
+                
+                # BTC buy & hold value
+                if has_btc_data and btc_initial_shares > 0 and not pd.isna(price_data['BTC-USD'].iloc[i]):
+                    btc_hold_value = btc_initial_shares * price_data['BTC-USD'].iloc[i]
+                else:
+                    btc_hold_value = btc_hold_values[-1] if btc_hold_values else initial_capital
             
             portfolio_values.append(portfolio_value)
             equal_weight_values.append(equal_weight_value)
+            btc_hold_values.append(btc_hold_value)
         
     # Performance metrics
     portfolio_total_return = (portfolio_values[-1] / portfolio_values[0] - 1)
     equal_weight_total_return = (equal_weight_values[-1] / equal_weight_values[0] - 1)
+    btc_total_return = (btc_hold_values[-1] / btc_hold_values[0] - 1) if btc_hold_values else 0
     total_trading_costs = sum(rebalance_costs)
     
     # Display metrics
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         st.metric("Portfolio Return", f"{portfolio_total_return:.1%}")
     with col2:
         st.metric("Equal Weight Return", f"{equal_weight_total_return:.1%}")
     with col3:
-        st.metric("Trading Costs", f"${total_trading_costs:,.0f}")
+        st.metric("BTC Buy & Hold", f"{btc_total_return:.1%}")
     with col4:
+        st.metric("Trading Costs", f"${total_trading_costs:,.0f}")
+    with col5:
         st.metric("Cost Ratio", f"{total_trading_costs/initial_capital:.2%}")
     
     # Calculate drawdown for portfolio (needed for comparisons)
@@ -1691,6 +1715,16 @@ elif mode == "Portfolio Analysis & Backtest":
         name='Equal Weight Benchmark',
         line=dict(width=2, color='#00d395', dash='dash')
     ))
+    
+    # Add BTC buy & hold if data is available
+    if has_btc_data and btc_hold_values:
+        backtest_fig.add_trace(go.Scatter(
+            x=price_data.index,
+            y=btc_hold_values,
+            mode='lines',
+            name='BTC Buy & Hold',
+            line=dict(width=2, color='#F7931A', dash='dot')
+        ))
     
     backtest_fig.update_layout(
         title="Realistic Backtest Performance (With Trading Costs)",
