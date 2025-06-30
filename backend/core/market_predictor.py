@@ -156,20 +156,45 @@ class MarketPredictor:
         
         # Generate future predictions
         last_features = X.iloc[-1:].fillna(0)
-        last_features_scaled = scaler.transform(last_features)
+        last_price = features_df['price'].iloc[-1]
         
         future_predictions = []
-        current_features = last_features_scaled.copy()
+        predicted_prices = [last_price]  # Start with last known price
         
-        for _ in range(prediction_days):
-            # Predict next price
-            next_price_preds = [model.predict(current_features)[0] for model in models.values()]
-            next_price = np.mean(next_price_preds)
-            future_predictions.append(next_price)
+        for step in range(prediction_days):
+            # Get current features for prediction
+            current_features_raw = last_features.copy()
             
-            # Update features for next prediction (simplified)
-            # In practice, you'd want to update all relevant features
-            current_features = current_features  # Simplified for now
+            # Update lag features with predicted prices
+            if len(predicted_prices) >= 1:
+                current_features_raw.loc[current_features_raw.index[0], 'returns_lag_1'] = (predicted_prices[-1] / predicted_prices[-2] - 1) if len(predicted_prices) > 1 else 0
+            if len(predicted_prices) >= 2:
+                current_features_raw.loc[current_features_raw.index[0], 'returns_lag_2'] = (predicted_prices[-2] / predicted_prices[-3] - 1) if len(predicted_prices) > 2 else 0
+            if len(predicted_prices) >= 3:
+                current_features_raw.loc[current_features_raw.index[0], 'returns_lag_3'] = (predicted_prices[-3] / predicted_prices[-4] - 1) if len(predicted_prices) > 3 else 0
+            if len(predicted_prices) >= 5:
+                current_features_raw.loc[current_features_raw.index[0], 'returns_lag_5'] = (predicted_prices[-5] / predicted_prices[-6] - 1) if len(predicted_prices) > 5 else 0
+            if len(predicted_prices) >= 10:
+                current_features_raw.loc[current_features_raw.index[0], 'returns_lag_10'] = (predicted_prices[-10] / predicted_prices[-11] - 1) if len(predicted_prices) > 10 else 0
+                
+            # Update momentum features
+            current_features_raw.loc[current_features_raw.index[0], 'momentum_5'] = (predicted_prices[-1] / predicted_prices[-6] - 1) if len(predicted_prices) > 5 else 0
+            current_features_raw.loc[current_features_raw.index[0], 'momentum_20'] = (predicted_prices[-1] / predicted_prices[-21] - 1) if len(predicted_prices) > 20 else 0
+            
+            # Update volatility features (simplified - using recent predictions)
+            if len(predicted_prices) >= 6:
+                recent_returns = [predicted_prices[i]/predicted_prices[i-1] - 1 for i in range(max(1, len(predicted_prices)-5), len(predicted_prices))]
+                current_features_raw.loc[current_features_raw.index[0], 'volatility_5'] = np.std(recent_returns) if len(recent_returns) > 1 else 0
+            
+            # Scale features
+            current_features_scaled = scaler.transform(current_features_raw.fillna(0))
+            
+            # Predict next price
+            next_price_preds = [model.predict(current_features_scaled)[0] for model in models.values()]
+            next_price = np.mean(next_price_preds)
+            
+            future_predictions.append(next_price)
+            predicted_prices.append(next_price)
         
         # Calculate confidence intervals (simplified)
         price_std = features_df['price'].pct_change().std()

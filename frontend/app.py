@@ -3372,10 +3372,19 @@ elif mode == "ML Predictions":
         models = list(portfolio_predictions.keys())
         predictions_vals = list(portfolio_predictions.values())
         
+        # Create dynamic colors for all models plus ensemble
+        model_colors_list = []
+        for model in models:
+            if model in model_colors:
+                model_colors_list.append(model_colors[model])
+            else:
+                model_colors_list.append('#888888')  # Default gray for unknown models
+        model_colors_list.append('#000000')  # Black for ensemble
+        
         fig_pred.add_trace(go.Bar(
             x=models + ['Ensemble'],
             y=predictions_vals + [ensemble_prediction],
-            marker_color=['#1f77b4', '#ff7f0e', '#2ca02c'],
+            marker_color=model_colors_list,
             text=[f"{val:.2%}" for val in predictions_vals + [ensemble_prediction]],
             textposition='auto'
         ))
