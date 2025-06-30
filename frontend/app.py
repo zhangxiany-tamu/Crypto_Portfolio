@@ -4047,11 +4047,100 @@ elif mode == "AI Investment Advisor":
         
         return optimization_results
     
+    # Generate timeframe-specific market context
+    def generate_timeframe_context(horizon):
+        """Generate different data context based on investment horizon"""
+        context = {}
+        
+        if "Short-term" in horizon:
+            # Short-term: Focus on recent performance, technical indicators, momentum
+            context_days = 30  # Last 30 days
+            context["timeframe"] = "Short-term tactical analysis (30 days)"
+            context["focus"] = "Technical indicators, momentum, short-term volatility"
+        elif "Medium-term" in horizon:
+            # Medium-term: Balance of recent and historical data
+            context_days = 90  # Last 90 days
+            context["timeframe"] = "Medium-term strategic analysis (90 days)"
+            context["focus"] = "Trend analysis, seasonal patterns, medium-term fundamentals"
+        else:  # Long-term
+            # Long-term: Full historical data, fundamentals, macro trends
+            context_days = min(365, len(price_data))  # Last year or all available data
+            context["timeframe"] = "Long-term investment analysis (365 days)"
+            context["focus"] = "Historical patterns, long-term growth, macro fundamentals"
+        
+        # Get subset of data for the timeframe
+        recent_price_data = price_data.tail(context_days)
+        recent_returns = returns.tail(context_days)
+        
+        # Calculate timeframe-specific metrics
+        for symbol in selected_symbols:
+            asset_name = symbol.replace('-USD', '')
+            
+            # Price data for the specific timeframe
+            asset_prices = recent_price_data[symbol].dropna()
+            asset_returns = recent_returns[symbol].dropna()
+            
+            if len(asset_prices) > 0:
+                current_price = asset_prices.iloc[-1]
+                period_start_price = asset_prices.iloc[0]
+                period_return = (current_price / period_start_price - 1) * 100
+                period_volatility = asset_returns.std() * np.sqrt(252) * 100
+                
+                # Technical indicators for the timeframe
+                if len(asset_prices) >= 20:
+                    sma_20 = asset_prices.rolling(20).mean().iloc[-1]
+                    rsi = calculate_rsi_simple(asset_prices, 14).iloc[-1] if len(asset_prices) >= 14 else None
+                    
+                    # MACD
+                    ema_12 = asset_prices.ewm(span=12).mean().iloc[-1]
+                    ema_26 = asset_prices.ewm(span=26).mean().iloc[-1] if len(asset_prices) >= 26 else ema_12
+                    macd = ema_12 - ema_26
+                else:
+                    sma_20 = current_price
+                    rsi = None
+                    macd = 0
+                
+                # Momentum indicators
+                momentum_short = None
+                momentum_medium = None
+                
+                if len(asset_prices) >= 7:
+                    momentum_short = (current_price / asset_prices.iloc[-7] - 1) * 100  # 7-day momentum
+                if len(asset_prices) >= 30:
+                    momentum_medium = (current_price / asset_prices.iloc[-30] - 1) * 100  # 30-day momentum
+                
+                context[asset_name] = {
+                    "period_return": f"{period_return:.2f}%",
+                    "period_volatility": f"{period_volatility:.2f}%",
+                    "current_price": f"${current_price:.2f}",
+                    "sma_20_ratio": f"{(current_price / sma_20 - 1) * 100:.2f}%" if sma_20 > 0 else "N/A",
+                    "rsi": f"{rsi:.1f}" if rsi is not None else "N/A",
+                    "macd_signal": "Bullish" if macd > 0 else "Bearish",
+                    "momentum_7d": f"{momentum_short:.2f}%" if momentum_short is not None else "N/A",
+                    "momentum_30d": f"{momentum_medium:.2f}%" if momentum_medium is not None else "N/A",
+                    "data_points": len(asset_prices)
+                }
+        
+        return context
+    
+    # Helper function for RSI calculation
+    def calculate_rsi_simple(prices, window=14):
+        """Simple RSI calculation"""
+        delta = prices.diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs))
+        return rsi
+    
     # Generate comprehensive analysis data
     def generate_analysis_data():
         analysis_data = {
             "selected_assets": [symbol.replace('-USD', '') for symbol in selected_symbols],
             "time_period": f"{start_date} to {end_date}",
+            "investment_horizon": investment_horizon,
+            "risk_tolerance": risk_tolerance,
+            "timeframe_context": generate_timeframe_context(investment_horizon),
             "market_data": {},
             "ml_predictions": {},
             "portfolio_optimization": {},
@@ -4078,17 +4167,62 @@ elif mode == "AI Investment Advisor":
         # Get portfolio optimization results
         analysis_data["portfolio_optimization"] = run_portfolio_optimization_for_ai()
         
-        # Correlation analysis
+        # Enhanced correlation analysis
         try:
             corr_matrix = returns.corr()
+            # Calculate average correlation (excluding diagonal)
             avg_correlation = corr_matrix.values[np.triu_indices_from(corr_matrix.values, k=1)].mean()
             
+            # Find highest and lowest correlations
+            corr_pairs = []
+            for i in range(len(selected_symbols)):
+                for j in range(i+1, len(selected_symbols)):
+                    asset1 = selected_symbols[i].replace('-USD', '')
+                    asset2 = selected_symbols[j].replace('-USD', '')
+                    correlation = corr_matrix.iloc[i, j]
+                    corr_pairs.append({
+                        'pair': f"{asset1}-{asset2}",
+                        'correlation': correlation
+                    })
+            
+            # Sort to find highest and lowest
+            corr_pairs_sorted = sorted(corr_pairs, key=lambda x: x['correlation'])
+            lowest_corr = corr_pairs_sorted[0] if corr_pairs_sorted else None
+            highest_corr = corr_pairs_sorted[-1] if corr_pairs_sorted else None
+            
+            # Calculate correlation distribution
+            corr_values = [pair['correlation'] for pair in corr_pairs]
+            high_corr_count = sum(1 for corr in corr_values if corr > 0.7)
+            medium_corr_count = sum(1 for corr in corr_values if 0.3 <= corr <= 0.7)
+            low_corr_count = sum(1 for corr in corr_values if corr < 0.3)
+            
             analysis_data["correlation_analysis"] = {
-                "average_correlation": f"{avg_correlation:.2f}",
-                "diversification_potential": "Low" if avg_correlation > 0.7 else "Medium" if avg_correlation > 0.3 else "High"
+                "average_correlation": f"{avg_correlation:.3f}",
+                "diversification_potential": "Low" if avg_correlation > 0.7 else "Medium" if avg_correlation > 0.3 else "High",
+                "highest_correlation": {
+                    "pair": highest_corr['pair'] if highest_corr else "N/A",
+                    "value": f"{highest_corr['correlation']:.3f}" if highest_corr else "N/A"
+                },
+                "lowest_correlation": {
+                    "pair": lowest_corr['pair'] if lowest_corr else "N/A", 
+                    "value": f"{lowest_corr['correlation']:.3f}" if lowest_corr else "N/A"
+                },
+                "correlation_distribution": {
+                    "high_correlation_pairs": high_corr_count,
+                    "medium_correlation_pairs": medium_corr_count,
+                    "low_correlation_pairs": low_corr_count,
+                    "total_pairs": len(corr_pairs)
+                },
+                "interpretation": {
+                    "diversification_level": "Poor" if avg_correlation > 0.8 else "Fair" if avg_correlation > 0.6 else "Good" if avg_correlation > 0.4 else "Excellent",
+                    "risk_concentration": "High" if avg_correlation > 0.7 else "Medium" if avg_correlation > 0.5 else "Low"
+                }
             }
         except:
-            pass
+            analysis_data["correlation_analysis"] = {
+                "average_correlation": "Unable to calculate",
+                "diversification_potential": "Unknown"
+            }
         
         return analysis_data
     
@@ -4099,7 +4233,7 @@ elif mode == "AI Investment Advisor":
             
             # Create structured prompt for AI
             prompt = f"""
-            As a crypto portfolio advisor, analyze the comprehensive data and provide a structured response in JSON format:
+            As an expert cryptocurrency investment advisor, analyze the comprehensive data and provide a structured response in JSON format:
             
             **Portfolio Configuration:**
             - Selected Assets: {', '.join(analysis_data['selected_assets'])}
@@ -4107,15 +4241,29 @@ elif mode == "AI Investment Advisor":
             - Investment Horizon: {investment_horizon}
             - Analysis Period: {analysis_data['time_period']}
             
-            **Market Performance Data:**
+            **Timeframe-Specific Analysis Context:**
+            {json.dumps(analysis_data['timeframe_context'], indent=2)}
+            
+            **Horizon-Focused Market Data:**
+            This data is filtered and calculated specifically for {investment_horizon.lower()} analysis:
             {json.dumps(analysis_data['market_data'], indent=2)}
             
             **Machine Learning Predictions (7-day forecasts using 4 models):**
             Note: Predictions generated using Random Forest, Linear Regression, Neural Network, and XGBoost/Gradient Boosting models.
             Features include: RSI, MACD (line, signal, histogram), moving averages, momentum indicators, and volatility measures.
+            
+            **IMPORTANT - Weight ML predictions based on investment horizon:**
+            - Short-term (1-3 months): HIGH weight on ML predictions (70% importance)
+            - Medium-term (3-12 months): MODERATE weight on ML predictions (40% importance)  
+            - Long-term (1+ years): LOW weight on ML predictions (20% importance)
+            
             {json.dumps(analysis_data['ml_predictions'], indent=2)}
             
             **Portfolio Optimization Results (Multiple Methods):**
+            Consider optimization method relevance based on investment horizon:
+            - Short-term: Focus on momentum and technical factors, tactical rebalancing
+            - Medium-term: Balance risk-return optimization with trend following
+            - Long-term: Emphasize fundamental diversification and strategic allocation
             {json.dumps(analysis_data['portfolio_optimization'], indent=2)}
             
             **Correlation Analysis:**
@@ -4124,8 +4272,20 @@ elif mode == "AI Investment Advisor":
             **Current Portfolio (User Defined):**
             {json.dumps(current_portfolio_weights, indent=2)}
             
-            **Instructions:**
-            Analyze the data and recommend a target portfolio allocation for {investment_horizon}. Use the user's current portfolio above as starting point and provide rebalancing plan.
+            **Horizon-Specific Analysis Instructions:**
+            
+            {"SHORT-TERM FOCUS: Prioritize technical indicators from timeframe_context (RSI, MACD signals, momentum_7d/30d), recent volatility patterns, and ML predictions. Make tactical recommendations based on current market momentum and technical analysis. Consider more frequent rebalancing." if "Short-term" in investment_horizon else ""}
+            
+            {"MEDIUM-TERM FOCUS: Balance technical analysis with fundamental trends. Use timeframe_context period returns and volatility. Weight ML predictions moderately. Consider seasonal patterns and medium-term momentum. Recommend strategic moves with some tactical adjustments." if "Medium-term" in investment_horizon else ""}
+            
+            {"LONG-TERM FOCUS: Emphasize fundamental analysis, historical performance patterns from timeframe_context, and diversification benefits from portfolio optimization. Use ML predictions as minor supporting evidence only. Focus on strategic asset allocation over tactical moves. Recommend buy-and-hold approach with periodic rebalancing." if "Long-term" in investment_horizon else ""}
+            
+            **Analysis Process:**
+            1. First, analyze the timeframe_context data that's specifically relevant to {investment_horizon}
+            2. Weight the importance of different data sources based on the investment horizon  
+            3. Use horizon-appropriate metrics (short-term momentum vs long-term fundamentals)
+            4. Provide portfolio allocation reasoning that matches the investment timeframe
+            5. Include rebalancing frequency recommendations appropriate for the horizon
             
             **Required Response Format (JSON only):**
             {{
@@ -4334,21 +4494,154 @@ elif mode == "AI Investment Advisor":
     
     # Add expandable section for data sources
     with st.expander("View Analysis Data Sources"):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.write("**Market Performance Data**")
-            if 'analysis_data' in locals():
+        if 'analysis_data' in locals():
+            st.write("### Data Sources Sent to AI")
+            
+            # Show timeframe context first
+            st.write("**1. Timeframe-Specific Analysis Context**")
+            st.info(f"**Investment Horizon:** {investment_horizon}")
+            if "timeframe_context" in analysis_data:
+                context = analysis_data["timeframe_context"]
+                st.write(f"**Analysis Period:** {context.get('timeframe', 'N/A')}")
+                st.write(f"**Focus Areas:** {context.get('focus', 'N/A')}")
+                
+                # Show timeframe-specific metrics for each asset
+                context_df_data = []
+                for asset, metrics in context.items():
+                    if asset not in ['timeframe', 'focus']:
+                        context_df_data.append({
+                            'Asset': asset,
+                            'Period Return': metrics.get('period_return', 'N/A'),
+                            'Period Volatility': metrics.get('period_volatility', 'N/A'),
+                            'RSI': metrics.get('rsi', 'N/A'),
+                            'MACD Signal': metrics.get('macd_signal', 'N/A'),
+                            '7d Momentum': metrics.get('momentum_7d', 'N/A'),
+                            '30d Momentum': metrics.get('momentum_30d', 'N/A'),
+                            'Data Points': metrics.get('data_points', 'N/A')
+                        })
+                
+                if context_df_data:
+                    context_df = pd.DataFrame(context_df_data)
+                    st.dataframe(context_df, use_container_width=True)
+            
+            # Show the data weight guidance
+            st.write("**2. AI Guidance Based on Investment Horizon**")
+            if "Short-term" in investment_horizon:
+                st.success("**SHORT-TERM FOCUS:** High weight on ML predictions (70%), technical indicators, and recent momentum")
+            elif "Medium-term" in investment_horizon:
+                st.info("**MEDIUM-TERM FOCUS:** Moderate weight on ML predictions (40%), balanced technical/fundamental analysis")
+            else:
+                st.warning("**LONG-TERM FOCUS:** Low weight on ML predictions (20%), emphasis on fundamentals and diversification")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.write("**3. Market Performance Data (Full Period)**")
                 market_source_df = pd.DataFrame(analysis_data["market_data"]).T
                 st.dataframe(market_source_df, use_container_width=True)
-        
-        with col2:
-            st.write("**Technical Indicators**")
-            if 'analysis_data' in locals() and analysis_data["ml_predictions"]:
-                tech_source_df = pd.DataFrame(analysis_data["ml_predictions"]).T
-                st.dataframe(tech_source_df, use_container_width=True)
-            else:
-                st.write("No technical data available")
+            
+            with col2:
+                st.write("**4. ML Predictions (7-day forecasts)**")
+                if analysis_data["ml_predictions"]:
+                    tech_source_df = pd.DataFrame(analysis_data["ml_predictions"]).T
+                    st.dataframe(tech_source_df, use_container_width=True)
+                else:
+                    st.write("No ML prediction data available")
+            
+            # Portfolio optimization and correlation data
+            if analysis_data.get("portfolio_optimization"):
+                st.write("**5. Portfolio Optimization Results**")
+                opt_df_data = []
+                for method, results in analysis_data["portfolio_optimization"].items():
+                    opt_df_data.append({
+                        'Method': method.replace('_', ' ').title(),
+                        'Expected Return': results.get('expected_return', 'N/A'),
+                        'Volatility': results.get('volatility', 'N/A'),
+                        'Sharpe Ratio': results.get('sharpe_ratio', 'N/A')
+                    })
+                
+                if opt_df_data:
+                    opt_df = pd.DataFrame(opt_df_data)
+                    st.dataframe(opt_df, use_container_width=True)
+            
+            if analysis_data.get("correlation_analysis"):
+                st.write("**6. Correlation Analysis**")
+                corr_data = analysis_data["correlation_analysis"]
+                
+                # Create a clean presentation of correlation data
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    avg_corr = corr_data.get("average_correlation", "N/A")
+                    if avg_corr != "N/A" and avg_corr != "Unable to calculate":
+                        corr_val = float(avg_corr)
+                        color = "red" if corr_val > 0.7 else "orange" if corr_val > 0.5 else "green"
+                        st.metric("Average Correlation", avg_corr, delta=None)
+                        st.markdown(f"<span style='color: {color};'>**{corr_data.get('diversification_potential', 'N/A')} Diversification**</span>", unsafe_allow_html=True)
+                    else:
+                        st.metric("Average Correlation", "N/A")
+                
+                with col2:
+                    if "highest_correlation" in corr_data:
+                        highest = corr_data["highest_correlation"]
+                        st.metric("Highest Correlation", 
+                                f"{highest.get('value', 'N/A')}", 
+                                delta=None)
+                        st.caption(f"Pair: {highest.get('pair', 'N/A')}")
+                    
+                with col3:
+                    if "lowest_correlation" in corr_data:
+                        lowest = corr_data["lowest_correlation"]
+                        st.metric("Lowest Correlation", 
+                                f"{lowest.get('value', 'N/A')}", 
+                                delta=None)
+                        st.caption(f"Pair: {lowest.get('pair', 'N/A')}")
+                
+                # Show correlation distribution if available
+                if "correlation_distribution" in corr_data:
+                    dist = corr_data["correlation_distribution"]
+                    st.write("**Correlation Distribution:**")
+                    
+                    dist_col1, dist_col2, dist_col3, dist_col4 = st.columns(4)
+                    with dist_col1:
+                        st.metric("High (>0.7)", dist.get("high_correlation_pairs", 0))
+                    with dist_col2:
+                        st.metric("Medium (0.3-0.7)", dist.get("medium_correlation_pairs", 0))
+                    with dist_col3:
+                        st.metric("Low (<0.3)", dist.get("low_correlation_pairs", 0))
+                    with dist_col4:
+                        st.metric("Total Pairs", dist.get("total_pairs", 0))
+                
+                # Show interpretation if available
+                if "interpretation" in corr_data:
+                    interp = corr_data["interpretation"]
+                    div_level = interp.get("diversification_level", "Unknown")
+                    risk_conc = interp.get("risk_concentration", "Unknown")
+                    
+                    # Color-code the interpretation
+                    if div_level == "Excellent":
+                        div_color = "green"
+                    elif div_level == "Good":
+                        div_color = "blue"
+                    elif div_level == "Fair":
+                        div_color = "orange"
+                    else:
+                        div_color = "red"
+                    
+                    if risk_conc == "Low":
+                        risk_color = "green"
+                    elif risk_conc == "Medium":
+                        risk_color = "orange"
+                    else:
+                        risk_color = "red"
+                    
+                    st.markdown(f"""
+                    **Portfolio Assessment:**
+                    - **Diversification Level:** <span style='color: {div_color}; font-weight: bold;'>{div_level}</span>
+                    - **Risk Concentration:** <span style='color: {risk_color}; font-weight: bold;'>{risk_conc}</span>
+                    """, unsafe_allow_html=True)
+        else:
+            st.write("Analysis data not available. Click 'Get AI Investment Advice' to generate data.")
     
     # Portfolio analysis section
     st.subheader("Current Portfolio Overview")
