@@ -1,0 +1,59 @@
+name: Daily Crypto Data Update
+
+on:
+  schedule:
+    # Run at 5:00 AM UTC (midnight NYC time, accounting for EST/EDT)
+    - cron: '0 5 * * *'
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  update-crypto-data:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.8'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Run daily crypto data update
+      run: |
+        python scripts/daily_crypto_update.py
+        
+    - name: Check for database changes
+      id: check_changes
+      run: |
+        if git diff --quiet data/crypto_extended.db; then
+          echo "changes=false" >> $GITHUB_OUTPUT
+        else
+          echo "changes=true" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Commit and push database updates
+      if: steps.check_changes.outputs.changes == 'true'
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add data/crypto_extended.db
+        git commit -m "Auto-update crypto database with latest daily data $(date -u +%Y-%m-%d)"
+        git push
+        
+    - name: Create update summary
+      if: steps.check_changes.outputs.changes == 'true'  
+      run: |
+        echo "✅ Database updated successfully on $(date -u)" >> $GITHUB_STEP_SUMMARY
+        echo "📊 New crypto data has been added to the database" >> $GITHUB_STEP_SUMMARY
+        
+    - name: No updates needed
+      if: steps.check_changes.outputs.changes == 'false'
+      run: |
+        echo "ℹ️ No database updates needed on $(date -u)" >> $GITHUB_STEP_SUMMARY
+        echo "📊 Database is already up to date" >> $GITHUB_STEP_SUMMARY
