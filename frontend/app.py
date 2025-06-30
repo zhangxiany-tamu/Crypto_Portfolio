@@ -16,10 +16,16 @@ from datetime import datetime, timedelta
 # Removed yahooquery import - using enhanced crypto loader instead
 import sys
 import os
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from sklearn.neural_network import MLPRegressor
+try:
+    import xgboost as xgb
+    XGBOOST_AVAILABLE = True
+except ImportError:
+    XGBOOST_AVAILABLE = False
 import warnings
 import requests
 import json
@@ -285,6 +291,60 @@ def apply_theme_css(theme):
         min-height: 44px;
         padding: 8px 12px;
         color: var(--apple-text-primary);
+        transition: all 0.15s ease;
+    }
+    
+    .stTextInput > div > div > input:focus {
+        border-color: var(--apple-blue);
+        box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.25);
+        outline: none;
+    }
+    
+    /* Ensure password input fields match other inputs */
+    .stTextInput > div > div > input[type="password"] {
+        background: var(--apple-card-bg);
+        border: 1px solid var(--apple-border);
+        border-radius: var(--apple-radius);
+        font-size: 17px;
+        min-height: 44px;
+        padding: 8px 12px;
+        color: var(--apple-text-primary);
+        transition: all 0.15s ease;
+    }
+    
+    .stTextInput > div > div > input[type="password"]:focus {
+        border-color: var(--apple-blue);
+        box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.25);
+        outline: none;
+    }
+    
+    /* Remove inner container styling for text inputs */
+    .stTextInput > div > div {
+        border: none !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+    }
+    
+    /* Make the input fill the entire container and remove inner borders */
+    .stTextInput > div > div > input,
+    .stTextInput > div > div > input[type="password"] {
+        width: 100% !important;
+        box-sizing: border-box !important;
+        border-radius: var(--apple-radius) !important;
+        border: none !important;
+        background: var(--apple-card-bg) !important;
+        color: var(--apple-text-primary) !important;
+        font-size: 17px !important;
+        min-height: 44px !important;
+        padding: 8px 12px !important;
+    }
+    
+    .stTextInput > div > div > input:focus,
+    .stTextInput > div > div > input[type="password"]:focus {
+        border: none !important;
+        box-shadow: none !important;
+        outline: none !important;
     }
     
     /* Style multiselect selected items with white background */
@@ -339,33 +399,44 @@ def apply_theme_css(theme):
         color: #050f19 !important;
     }
     
-    /* Apple-style clean tables - no grid, minimal lines */
+    /* Remove the red selection border that appears on focus */
+    .stMultiSelect div[data-baseweb="select"] {
+        border: none !important;
+    }
+    
+    .stMultiSelect div[data-baseweb="select"]:focus-within {
+        border: none !important;
+        box-shadow: none !important;
+    }
+    
+    /* Clean, minimal table styling */
     .stDataFrame {
         background: transparent !important;
         box-shadow: none !important;
-        border-radius: var(--apple-radius-lg);
         border: none !important;
-        overflow: hidden;
+        overflow: visible;
+        margin: 16px 0;
     }
     
     .stDataFrame table {
         background: transparent !important;
         color: var(--apple-text-primary) !important;
-        font-size: 17px !important;
-        border-collapse: separate !important;
+        font-size: 15px !important;
+        border-collapse: collapse !important;
         border-spacing: 0 !important;
-        border-radius: inherit !important;
+        width: 100% !important;
+        border: none !important;
     }
     
     .stDataFrame th {
         background: transparent !important;
         color: var(--apple-text-secondary) !important;
-        font-weight: 500 !important;
-        font-size: 15px !important;
-        letter-spacing: -0.022em;
+        font-weight: 600 !important;
+        font-size: 13px !important;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
         border: none !important;
-        border-bottom: none !important;
-        padding: 20px 24px !important;
+        padding: 16px 20px !important;
         text-align: left !important;
     }
     
@@ -373,21 +444,13 @@ def apply_theme_css(theme):
         background: transparent !important;
         color: var(--apple-text-primary) !important;
         border: none !important;
-        padding: 16px 24px !important;
+        padding: 14px 20px !important;
         font-feature-settings: 'tnum';
         font-weight: 400 !important;
+        vertical-align: middle !important;
     }
     
-    /* Ensure proper corner rounding for header cells */
-    .stDataFrame th:first-child {
-        border-top-left-radius: var(--apple-radius-lg) !important;
-    }
-    
-    .stDataFrame th:last-child {
-        border-top-right-radius: var(--apple-radius-lg) !important;
-    }
-    
-    /* Zebra striping - subtle alternating row backgrounds */
+    /* Simple alternating row backgrounds */
     .stDataFrame tbody tr:nth-child(even) td {
         background: rgba(248, 249, 250, 0.3) !important;
     }
@@ -396,28 +459,19 @@ def apply_theme_css(theme):
         background: transparent !important;
     }
     
-    /* Hover state - very subtle */
-    .stDataFrame tr:hover td {
-        background: rgba(0, 122, 255, 0.04) !important;
+    /* Subtle hover effect */
+    .stDataFrame tbody tr:hover td {
+        background: rgba(0, 122, 255, 0.05) !important;
     }
     
-    /* No row separators - clean table */
-    .stDataFrame tbody tr {
-        border-bottom: none !important;
-    }
-    
-    .stDataFrame tbody tr:last-child {
-        border-bottom: none !important;
-    }
-    
-    /* First column styling for row headers */
+    /* Enhanced styling for first column */
     .stDataFrame td:first-child {
         font-weight: 500 !important;
         color: var(--apple-text-primary) !important;
     }
     
-    /* Number formatting for better readability */
-    .stDataFrame td[data-type="number"] {
+    /* Right-align numerical columns */
+    .stDataFrame td:not(:first-child) {
         text-align: right !important;
         font-variant-numeric: tabular-nums !important;
     }
@@ -1470,77 +1524,282 @@ if mode == "Market Insights":
         tab1, tab2, tab3 = st.tabs(["Price Distribution", "Returns Analysis", "Technical Indicators"])
         
         with tab1:
-            # Price histogram
-            fig_hist = go.Figure()
-            fig_hist.add_trace(go.Histogram(
-                x=coin_data,
-                nbinsx=50,
-                name=f"{coin_name} Price Distribution"
-            ))
-            fig_hist.update_layout(
-                title=f"{coin_name} Price Distribution",
-                xaxis_title="Price (USD)",
-                yaxis_title="Frequency",
-                height=400
-            )
-            st.plotly_chart(fig_hist, use_container_width=True)
-        
-        with tab2:
-            # Returns distribution and statistics
-            col1, col2 = st.columns(2)
+            # Price distribution analysis
+            col1, col2 = st.columns([2, 1])
             
             with col1:
+                # Price histogram with overlays
+                fig_hist = go.Figure()
+                
+                # Main histogram
+                fig_hist.add_trace(go.Histogram(
+                    x=coin_data,
+                    nbinsx=50,
+                    name=f"{coin_name} Price Distribution",
+                    opacity=0.7,
+                    marker_color='lightblue'
+                ))
+                
+                # Add reference lines as traces for legend
+                price_mean = coin_data.mean()
+                price_median = coin_data.median()
+                current_price = coin_data.iloc[-1]
+                
+                # Add mean line
+                fig_hist.add_trace(go.Scatter(
+                    x=[price_mean, price_mean],
+                    y=[0, 1],
+                    mode='lines',
+                    name='Mean',
+                    line=dict(color='red', dash='dash', width=2),
+                    yaxis='y2',
+                    showlegend=True
+                ))
+                
+                # Add median line
+                fig_hist.add_trace(go.Scatter(
+                    x=[price_median, price_median],
+                    y=[0, 1],
+                    mode='lines',
+                    name='Median',
+                    line=dict(color='green', dash='dash', width=2),
+                    yaxis='y2',
+                    showlegend=True
+                ))
+                
+                # Add current price line
+                fig_hist.add_trace(go.Scatter(
+                    x=[current_price, current_price],
+                    y=[0, 1],
+                    mode='lines',
+                    name='Current',
+                    line=dict(color='orange', dash='solid', width=2),
+                    yaxis='y2',
+                    showlegend=True
+                ))
+                
+                fig_hist.update_layout(
+                    title=f"{coin_name} Price Distribution Analysis",
+                    xaxis_title="Price (USD)",
+                    yaxis_title="Frequency",
+                    height=450,
+                    showlegend=True,
+                    legend=dict(
+                        orientation="h",
+                        yanchor="top",
+                        y=-0.15,
+                        xanchor="center",
+                        x=0.5,
+                        bgcolor='rgba(0,0,0,0)',
+                        borderwidth=0
+                    ),
+                    yaxis2=dict(
+                        overlaying='y',
+                        side='right',
+                        showgrid=False,
+                        showticklabels=False,
+                        range=[0, 1]
+                    )
+                )
+                st.plotly_chart(fig_hist, use_container_width=True)
+                
+                # Box plot for price distribution
+                fig_box = go.Figure()
+                fig_box.add_trace(go.Box(
+                    y=coin_data,
+                    name=f"{coin_name}",
+                    boxpoints='outliers',
+                    marker_color='lightcoral'
+                ))
+                fig_box.update_layout(
+                    title=f"{coin_name} Price Box Plot (Outlier Detection)",
+                    yaxis_title="Price (USD)",
+                    height=300
+                )
+                st.plotly_chart(fig_box, use_container_width=True)
+            
+            with col2:
+                # Calculate statistics
+                price_std = coin_data.std()
+                price_min = coin_data.min()
+                price_max = coin_data.max()
+                price_range = price_max - price_min
+                price_skewness = coin_data.skew()
+                price_kurtosis = coin_data.kurtosis()
+                price_25 = coin_data.quantile(0.25)
+                price_75 = coin_data.quantile(0.75)
+                cv = (price_std / price_mean) * 100
+                distance_from_mean = abs(current_price - price_mean) / price_std
+                percentile_rank = (coin_data <= current_price).mean() * 100
+                
+                # Compact key metrics with shorter labels
+                st.markdown("### Key Metrics")
+                metric_col1, metric_col2 = st.columns(2)
+                with metric_col1:
+                    st.metric("Price", f"${current_price:.2f}")
+                    st.metric("Avg", f"${price_mean:.2f}")
+                    st.metric("Range", f"${price_range:.0f}")
+                with metric_col2:
+                    st.metric("Mid", f"${price_median:.2f}")
+                    st.metric("StdDev", f"${price_std:.0f}")
+                    st.metric("CV%", f"{cv:.1f}")
+                
+                # Risk assessment with visual indicator
+                if distance_from_mean > 2:
+                    risk_color = "🔴"
+                    risk_text = "High deviation"
+                elif distance_from_mean > 1:
+                    risk_color = "🟡"
+                    risk_text = "Moderate deviation"
+                else:
+                    risk_color = "🟢"
+                    risk_text = "Normal range"
+                
+                st.markdown("### Assessment")
+                st.markdown(f"""
+                **Position**: {percentile_rank:.0f}th percentile  
+                **Status**: {risk_color} {risk_text} ({distance_from_mean:.1f}σ)
+                """)
+        
+        with tab2:
+            # Returns distribution analysis
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                # Returns histogram with overlays
                 fig_returns = go.Figure()
+                
+                # Main histogram
                 fig_returns.add_trace(go.Histogram(
                     x=coin_returns,
                     nbinsx=50,
-                    name=f"{coin_name} Daily Returns"
+                    name=f"{coin_name} Daily Returns",
+                    opacity=0.7,
+                    marker_color='lightcoral'
                 ))
+                
+                # Add reference lines as traces for legend
+                returns_mean = coin_returns.mean()
+                returns_median = coin_returns.median()
+                
+                # Add mean line
+                fig_returns.add_trace(go.Scatter(
+                    x=[returns_mean, returns_mean],
+                    y=[0, 1],
+                    mode='lines',
+                    name='Mean',
+                    line=dict(color='red', dash='dash', width=2),
+                    yaxis='y2',
+                    showlegend=True
+                ))
+                
+                # Add median line
+                fig_returns.add_trace(go.Scatter(
+                    x=[returns_median, returns_median],
+                    y=[0, 1],
+                    mode='lines',
+                    name='Median',
+                    line=dict(color='green', dash='dash', width=2),
+                    yaxis='y2',
+                    showlegend=True
+                ))
+                
+                # Add zero line
+                fig_returns.add_trace(go.Scatter(
+                    x=[0, 0],
+                    y=[0, 1],
+                    mode='lines',
+                    name='Zero',
+                    line=dict(color='gray', dash='solid', width=2),
+                    yaxis='y2',
+                    showlegend=True
+                ))
+                
                 fig_returns.update_layout(
-                    title="Daily Returns Distribution",
+                    title=f"{coin_name} Returns Distribution Analysis",
                     xaxis_title="Daily Return",
                     yaxis_title="Frequency",
-                    height=350
+                    height=450,
+                    showlegend=True,
+                    legend=dict(
+                        orientation="h",
+                        yanchor="top",
+                        y=-0.15,
+                        xanchor="center",
+                        x=0.5,
+                        bgcolor='rgba(0,0,0,0)',
+                        borderwidth=0
+                    ),
+                    yaxis2=dict(
+                        overlaying='y',
+                        side='right',
+                        showgrid=False,
+                        showticklabels=False,
+                        range=[0, 1]
+                    )
                 )
                 st.plotly_chart(fig_returns, use_container_width=True)
+                
+                # Box plot for returns distribution
+                fig_box_returns = go.Figure()
+                fig_box_returns.add_trace(go.Box(
+                    y=coin_returns,
+                    name=f"{coin_name}",
+                    boxpoints='outliers',
+                    marker_color='lightcoral'
+                ))
+                fig_box_returns.update_layout(
+                    title=f"{coin_name} Returns Box Plot (Outlier Detection)",
+                    yaxis_title="Daily Return",
+                    height=300
+                )
+                st.plotly_chart(fig_box_returns, use_container_width=True)
             
             with col2:
-                # Returns statistics
-                # Returns Statistics with Apple-style metrics
-                st.markdown("""
-                <h3 style="font-size: 24px; font-weight: 600; letter-spacing: -0.022em; color: var(--apple-text-primary); margin-top: 2rem; margin-bottom: 1.5rem;">
-                    Returns Statistics
-                </h3>
-                """, unsafe_allow_html=True)
-                
                 # Calculate statistics
-                mean_return = coin_returns.mean()
-                std_dev = coin_returns.std()
-                skewness = coin_returns.skew()
-                kurtosis = coin_returns.kurtosis()
-                min_return = coin_returns.min()
-                max_return = coin_returns.max()
-                percentile_5 = coin_returns.quantile(0.05)
-                percentile_95 = coin_returns.quantile(0.95)
+                returns_std = coin_returns.std()
+                returns_min = coin_returns.min()
+                returns_max = coin_returns.max()
+                returns_range = returns_max - returns_min
+                returns_skewness = coin_returns.skew()
+                returns_kurtosis = coin_returns.kurtosis()
+                returns_25 = coin_returns.quantile(0.25)
+                returns_75 = coin_returns.quantile(0.75)
+                returns_cv = (returns_std / abs(returns_mean)) * 100 if returns_mean != 0 else 0
                 
-                # Display in metric card grid
-                col1, col2, col3, col4 = st.columns(4)
+                # Compact key metrics with shorter labels
+                st.markdown("### Key Metrics")
+                metric_col1, metric_col2 = st.columns(2)
+                with metric_col1:
+                    st.metric("Mean", f"{returns_mean:.3f}")
+                    st.metric("Min", f"{returns_min:.2%}")
+                    st.metric("Range", f"{returns_range:.3f}")
+                with metric_col2:
+                    st.metric("Median", f"{returns_median:.3f}")
+                    st.metric("Max", f"{returns_max:.2%}")
+                    st.metric("StdDev", f"{returns_std:.3f}")
                 
-                with col1:
-                    st.metric("Daily Mean", f"{mean_return:.4f}")
-                    st.metric("Minimum Return", f"{min_return:.2%}")
+                # Volatility assessment
+                annualized_vol = returns_std * (252 ** 0.5)
+                if annualized_vol > 1.0:
+                    vol_color = "🔴"
+                    vol_text = "Very high volatility"
+                elif annualized_vol > 0.5:
+                    vol_color = "🟡"
+                    vol_text = "High volatility"
+                else:
+                    vol_color = "🟢"
+                    vol_text = "Moderate volatility"
                 
-                with col2:
-                    st.metric("Daily Std Dev", f"{std_dev:.4f}")
-                    st.metric("Maximum Return", f"{max_return:.2%}")
+                # Sharpe ratio (assuming risk-free rate of 0)
+                sharpe = returns_mean / returns_std * (252 ** 0.5) if returns_std > 0 else 0
                 
-                with col3:
-                    st.metric("Skewness", f"{skewness:.2f}")
-                    st.metric("5th Percentile", f"{percentile_5:.2%}")
-                
-                with col4:
-                    st.metric("Kurtosis", f"{kurtosis:.2f}")
-                    st.metric("95th Percentile", f"{percentile_95:.2%}")
+                st.markdown("### Assessment")
+                st.markdown(f"""
+                **Volatility**: {vol_color} {vol_text}  
+                **Annualized Vol**: {annualized_vol:.1%}  
+                **Sharpe Ratio**: {sharpe:.2f}
+                """)
         
         with tab3:
             # Technical indicators
@@ -1554,6 +1813,13 @@ if mode == "Market Insights":
             loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
             rs = gain / loss
             rsi = 100 - (100 / (1 + rs))
+            
+            # MACD calculation
+            ema_12 = coin_data.ewm(span=12).mean()
+            ema_26 = coin_data.ewm(span=26).mean()
+            macd_line = ema_12 - ema_26
+            macd_signal = macd_line.ewm(span=9).mean()
+            macd_histogram = macd_line - macd_signal
             
             fig_tech = go.Figure()
             
@@ -1611,6 +1877,48 @@ if mode == "Market Insights":
                 yaxis=dict(range=[0, 100])
             )
             st.plotly_chart(fig_rsi, use_container_width=True)
+            
+            # MACD chart
+            fig_macd = go.Figure()
+            
+            # MACD line
+            fig_macd.add_trace(go.Scatter(
+                x=macd_line.index,
+                y=macd_line,
+                mode='lines',
+                name='MACD Line',
+                line=dict(width=2, color='blue')
+            ))
+            
+            # Signal line
+            fig_macd.add_trace(go.Scatter(
+                x=macd_signal.index,
+                y=macd_signal,
+                mode='lines',
+                name='Signal Line',
+                line=dict(width=2, color='red')
+            ))
+            
+            # Histogram
+            fig_macd.add_trace(go.Bar(
+                x=macd_histogram.index,
+                y=macd_histogram,
+                name='MACD Histogram',
+                marker_color=['green' if x > 0 else 'red' for x in macd_histogram],
+                opacity=0.7
+            ))
+            
+            # Zero line
+            fig_macd.add_hline(y=0, line_dash="dash", line_color="gray", annotation_text="Zero Line")
+            
+            fig_macd.update_layout(
+                title="MACD (Moving Average Convergence Divergence)",
+                xaxis_title="Date",
+                yaxis_title="MACD",
+                height=350,
+                showlegend=True
+            )
+            st.plotly_chart(fig_macd, use_container_width=True)
 
 elif mode == "Portfolio Analysis & Backtest":
     st.header("Portfolio Analysis & Backtesting")
@@ -2485,12 +2793,31 @@ elif mode == "Market Insights":
 elif mode == "ML Predictions":
     st.header("Machine Learning Predictions")
     
+    # Check if cryptocurrencies are selected
+    if not selected_symbols:
+        st.warning("⚠️ Please select cryptocurrencies in the sidebar to run ML predictions.")
+        st.stop()
+    
     # Get cached data
-    price_data, returns = get_cached_data(
-        selected_symbols, 
-        start_date.strftime('%Y-%m-%d'), 
-        end_date.strftime('%Y-%m-%d')
-    )
+    try:
+        price_data, returns = get_cached_data(
+            selected_symbols, 
+            start_date.strftime('%Y-%m-%d'), 
+            end_date.strftime('%Y-%m-%d')
+        )
+        
+        # Check if we have data
+        if price_data is None or price_data.empty:
+            st.error("❌ No price data available for the selected period and cryptocurrencies.")
+            st.info("💡 Try selecting a longer date range or different cryptocurrencies.")
+            st.stop()
+            
+        # Display data info
+        st.info(f"Loaded data for {len(selected_symbols)} cryptocurrencies from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')} ({len(price_data)} days)")
+        
+    except Exception as e:
+        st.error(f"❌ Error loading data: {str(e)}")
+        st.stop()
     
     # ML Configuration in sidebar
     st.sidebar.subheader("ML Configuration")
@@ -2534,22 +2861,43 @@ elif mode == "ML Predictions":
     
     # ML Prediction function
     def predict_returns(prices, target_days=7, train_window=90):
-        features = create_features(prices)
-        
-        # Prepare target (future returns)
-        target = prices.shift(-target_days) / prices - 1
-        
-        # Align features and target
-        valid_idx = features.index.intersection(target.index)
-        X = features.loc[valid_idx].fillna(0)
-        y = target.loc[valid_idx].fillna(0)
-        
-        if len(X) < train_window:
+        try:
+            features = create_features(prices)
+            
+            # Prepare target (future returns)
+            target = prices.shift(-target_days) / prices - 1
+            
+            # Align features and target - remove NaN values
+            valid_idx = features.index.intersection(target.index)
+            X = features.loc[valid_idx]
+            y = target.loc[valid_idx]
+            
+            # Remove rows with any NaN values
+            mask = ~(X.isna().any(axis=1) | y.isna())
+            X = X[mask].fillna(0)
+            y = y[mask].fillna(0)
+            
+            # Check if we have enough data
+            if len(X) < max(train_window, 30):
+                st.warning(f"Insufficient data for training. Need at least {max(train_window, 30)} days, got {len(X)}")
+                return None, None, None
+            
+            # Use last train_window days for training, but leave space for future predictions
+            available_for_training = len(X) - target_days
+            if available_for_training < train_window:
+                train_window = max(available_for_training, 30)
+            
+            X_train = X.iloc[-train_window-target_days:-target_days] if len(X) > target_days else X.iloc[-train_window:]
+            y_train = y.iloc[-train_window-target_days:-target_days] if len(y) > target_days else y.iloc[-train_window:]
+            
+            # Ensure we have training data
+            if len(X_train) == 0 or len(y_train) == 0:
+                st.warning("No training data available after processing")
+                return None, None, None
+                
+        except Exception as e:
+            st.error(f"Error in data preparation: {str(e)}")
             return None, None, None
-        
-        # Use last train_window days for training
-        X_train = X.iloc[-train_window:-target_days] if len(X) > target_days else X.iloc[:-target_days]
-        y_train = y.iloc[-train_window:-target_days] if len(y) > target_days else y.iloc[:-target_days]
         
         if len(X_train) < 20:  # Minimum samples required
             return None, None, None
@@ -2561,8 +2909,41 @@ elif mode == "ML Predictions":
         # Train models
         models = {
             'Random Forest': RandomForestRegressor(n_estimators=100, random_state=42, max_depth=10),
-            'Linear Regression': LinearRegression()
+            'Linear Regression': LinearRegression(),
+            'Neural Network': MLPRegressor(
+                hidden_layer_sizes=(100, 50, 25),
+                max_iter=1000,
+                random_state=42,
+                early_stopping=True,
+                validation_fraction=0.15,
+                alpha=0.01,
+                learning_rate_init=0.001,
+                solver='adam',
+                activation='relu',
+                batch_size='auto',
+                beta_1=0.9,
+                beta_2=0.999,
+                tol=1e-4,
+                n_iter_no_change=20
+            )
         }
+        
+        # Add XGBoost if available, otherwise use sklearn GradientBoosting as fallback
+        if XGBOOST_AVAILABLE:
+            models['XGBoost'] = xgb.XGBRegressor(
+                n_estimators=100,
+                max_depth=6,
+                learning_rate=0.1,
+                random_state=42,
+                verbosity=0
+            )
+        else:
+            models['Gradient Boosting'] = GradientBoostingRegressor(
+                n_estimators=100,
+                max_depth=6,
+                learning_rate=0.1,
+                random_state=42
+            )
         
         predictions = {}
         metrics = {}
@@ -2618,47 +2999,122 @@ elif mode == "ML Predictions":
                 'MAE': metrics[model_name]['MAE']
             })
     
-    if all_predictions_data:
+    if not all_predictions_data:
+        st.error("❌ No successful predictions were generated for any of the selected cryptocurrencies.")
+        st.info("💡 This could be due to:")
+        st.write("""
+        - Insufficient historical data (need at least 30-90 days)
+        - Data quality issues
+        - Selected date range too short
+        - Technical issues with feature calculation
+        """)
+        st.info("🔧 Try:")
+        st.write("""
+        - Selecting a longer date range (6+ months recommended)
+        - Reducing the training window in ML Configuration
+        - Selecting different cryptocurrencies with more historical data
+        """)
+    else:
         predictions_df = pd.DataFrame(all_predictions_data)
         
         # Create comprehensive prediction visualization
         col1, col2 = st.columns(2)
         
         with col1:
-            # Bar chart for predictions by asset and model
+            # Enhanced bar chart for predictions by asset and model
+            # Define professional color palette for all models
+            model_colors = {
+                'Random Forest': '#2E8B57',      # Sea Green
+                'Linear Regression': '#4169E1',  # Royal Blue  
+                'Neural Network': '#FF6347',     # Tomato Red
+                'XGBoost': '#9932CC',           # Dark Orchid
+                'Gradient Boosting': '#FF8C00'  # Dark Orange
+            }
+            
             fig_bar = px.bar(
                 predictions_df,
                 x='Asset',
                 y='Prediction',
                 color='Model',
-                title=f"Predicted Returns by Asset ({prediction_days} days)",
-                labels={'Prediction': 'Predicted Return'},
+                title=f"Predicted Returns by Asset ({prediction_days}-day forecast)",
+                labels={'Prediction': 'Predicted Return', 'Asset': 'Cryptocurrency'},
                 text=[f"{val:.1%}" for val in predictions_df['Prediction']],
-                color_discrete_map={
-                    'Random Forest': '#2E8B57',
-                    'Linear Regression': '#4169E1'
-                }
+                color_discrete_map=model_colors,
+                barmode='group'
             )
-            fig_bar.update_traces(textposition='outside')
             
-            # Calculate y-axis range with generous padding for text visibility
+            # Enhanced trace styling
+            fig_bar.update_traces(
+                textposition='outside',
+                textfont_size=10,
+                textfont_color='black',
+                marker_line_width=0.5,
+                marker_line_color='white'
+            )
+            
+            # Smart y-axis range calculation
             y_min = predictions_df['Prediction'].min()
             y_max = predictions_df['Prediction'].max()
-            y_range = y_max - y_min
+            y_center = (y_min + y_max) / 2
+            y_range = abs(y_max - y_min)
             
-            # Ensure sufficient padding for text labels above bars
-            top_padding = max(0.04, y_range * 0.5)  # At least 4% or 50% of range for top
-            bottom_padding = max(0.02, y_range * 0.2)  # At least 2% or 20% of range for bottom
+            # Ensure minimum range for readability
+            if y_range < 0.02:  # Less than 2% range
+                y_range = 0.05  # Set minimum 5% range
+            
+            # Dynamic padding based on value magnitude and range
+            base_padding = y_range * 0.25
+            magnitude_padding = max(abs(y_min), abs(y_max)) * 0.15
+            min_padding = 0.03  # Minimum 3% padding
+            
+            padding = max(base_padding, magnitude_padding, min_padding)
+            
+            # Apply asymmetric padding for better balance
+            if y_max > 0:
+                top_padding = padding * 1.5  # More space for positive labels
+            else:
+                top_padding = padding
+                
+            if y_min < 0:
+                bottom_padding = padding * 1.5  # More space for negative labels
+            else:
+                bottom_padding = padding
             
             fig_bar.update_layout(
                 template='plotly_white',
-                height=400,
-                yaxis_tickformat='.1%',
-                xaxis_title="Cryptocurrency",
-                yaxis_title="Predicted Return",
+                height=500,
+                title_font_size=16,
+                title_x=0.5,
+                showlegend=True,
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.02,
+                    xanchor="center",
+                    x=0.5,
+                    bgcolor='rgba(0,0,0,0)',
+                    borderwidth=0
+                ),
+                xaxis=dict(
+                    title="Cryptocurrency",
+                    title_font_size=14,
+                    tickfont_size=12,
+                    gridcolor='rgba(0,0,0,0.1)'
+                ),
                 yaxis=dict(
-                    range=[y_min - bottom_padding, y_max + top_padding]
-                )
+                    title="Predicted Return",
+                    title_font_size=14,
+                    tickfont_size=11,
+                    tickformat='.1%',
+                    gridcolor='rgba(0,0,0,0.1)',
+                    range=[y_min - bottom_padding, y_max + top_padding],
+                    zeroline=True,
+                    zerolinecolor='rgba(0,0,0,0.3)',
+                    zerolinewidth=1
+                ),
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                margin=dict(t=80, b=60, l=60, r=40)
             )
             st.plotly_chart(fig_bar, use_container_width=True)
         
@@ -2717,22 +3173,43 @@ elif mode == "ML Predictions":
         # Detailed predictions table
         st.subheader("Detailed Predictions Summary")
         
-        # Create a more readable table
+        # Create a more readable table with all models
         table_data = []
+        available_models = ['Random Forest', 'Linear Regression', 'Neural Network']
+        if XGBOOST_AVAILABLE:
+            available_models.append('XGBoost')
+        else:
+            available_models.append('Gradient Boosting')
+        
         for symbol in selected_symbols:
             if symbol in prediction_results:
                 asset_name = symbol.replace('-USD', '')
-                rf_pred = prediction_results[symbol].get('Random Forest', 0)
-                lr_pred = prediction_results[symbol].get('Linear Regression', 0)
-                avg_pred = (rf_pred + lr_pred) / 2
+                row_data = {'Asset': asset_name}
                 
-                table_data.append({
-                    'Asset': asset_name,
-                    'Random Forest': f"{rf_pred:.2%}",
-                    'Linear Regression': f"{lr_pred:.2%}",
-                    'Average': f"{avg_pred:.2%}",
-                    'Confidence': "High" if abs(rf_pred - lr_pred) < 0.02 else "Medium" if abs(rf_pred - lr_pred) < 0.05 else "Low"
-                })
+                # Add predictions for each model
+                model_predictions = []
+                for model_name in available_models:
+                    pred = prediction_results[symbol].get(model_name, 0)
+                    row_data[model_name] = f"{pred:.2%}"
+                    model_predictions.append(pred)
+                
+                # Calculate average and standard deviation for confidence
+                avg_pred = np.mean(model_predictions)
+                std_pred = np.std(model_predictions)
+                row_data['Average'] = f"{avg_pred:.2%}"
+                
+                # Enhanced confidence calculation based on model agreement
+                if std_pred < 0.01:
+                    confidence = "Very High"
+                elif std_pred < 0.02:
+                    confidence = "High"
+                elif std_pred < 0.04:
+                    confidence = "Medium"
+                else:
+                    confidence = "Low"
+                    
+                row_data['Confidence'] = confidence
+                table_data.append(row_data)
         
         if table_data:
             summary_df = pd.DataFrame(table_data)
@@ -2778,32 +3255,34 @@ elif mode == "ML Predictions":
         else:
             normalized_weights = {k: 1.0/len(selected_symbols) for k in selected_symbols}
         
-        # Calculate portfolio predictions
-        portfolio_predictions = {'Random Forest': 0, 'Linear Regression': 0}
+        # Calculate portfolio predictions for all available models
+        available_models = ['Random Forest', 'Linear Regression', 'Neural Network']
+        if XGBOOST_AVAILABLE:
+            available_models.append('XGBoost')
+        else:
+            available_models.append('Gradient Boosting')
+        
+        portfolio_predictions = {model: 0 for model in available_models}
         
         for symbol in selected_symbols:
             if symbol in prediction_results:
-                for model_name in portfolio_predictions.keys():
-                    portfolio_predictions[model_name] += (
-                        normalized_weights[symbol] * prediction_results[symbol][model_name]
-                    )
+                for model_name in available_models:
+                    if model_name in prediction_results[symbol]:
+                        portfolio_predictions[model_name] += (
+                            normalized_weights[symbol] * prediction_results[symbol][model_name]
+                        )
         
         # Display portfolio predictions
-        col1, col2 = st.columns(2)
+        num_cols = len(available_models)
+        cols = st.columns(num_cols)
         
-        with col1:
-            st.metric(
-                "Random Forest Portfolio Prediction",
-                f"{portfolio_predictions['Random Forest']:.2%}",
-                delta=f"{prediction_days}-day forecast"
-            )
-        
-        with col2:
-            st.metric(
-                "Linear Regression Portfolio Prediction", 
-                f"{portfolio_predictions['Linear Regression']:.2%}",
-                delta=f"{prediction_days}-day forecast"
-            )
+        for i, model_name in enumerate(available_models):
+            with cols[i]:
+                st.metric(
+                    f"{model_name} Portfolio",
+                    f"{portfolio_predictions[model_name]:.2%}",
+                    delta=f"{prediction_days}-day forecast"
+                )
         
         # Ensemble prediction (average)
         ensemble_prediction = np.mean(list(portfolio_predictions.values()))
