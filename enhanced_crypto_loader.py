@@ -281,8 +281,8 @@ class EnhancedCryptoLoader:
                             if point['close'] > 0:  # Valid data
                                 date = datetime.fromtimestamp(point['time']).date()
                                 
-                                # Only include data within requested range
-                                if start_dt.date() <= date <= end_dt.date():
+                                # Include data within requested range, or most recent data if requesting future dates
+                                if start_dt.date() <= date <= end_dt.date() or (end_dt.date() > datetime.now().date() and date <= datetime.now().date()):
                                     all_data.append({
                                         'symbol': symbol,
                                         'date': date.strftime('%Y-%m-%d'),

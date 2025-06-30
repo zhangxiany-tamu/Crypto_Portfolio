@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 import sys
 import os
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, Lasso
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.neural_network import MLPRegressor
@@ -2864,8 +2864,11 @@ elif mode == "ML Predictions":
         try:
             features = create_features(prices)
             
-            # Prepare target (future returns)
+            # Prepare target (future returns) with bounds
             target = prices.shift(-target_days) / prices - 1
+            
+            # Cap extreme target values to improve training stability
+            target = target.clip(-0.8, 2.0)  # Cap between -80% and +200%
             
             # Align features and target - remove NaN values
             valid_idx = features.index.intersection(target.index)
@@ -2882,13 +2885,19 @@ elif mode == "ML Predictions":
                 st.warning(f"Insufficient data for training. Need at least {max(train_window, 30)} days, got {len(X)}")
                 return None, None, None
             
-            # Use last train_window days for training, but leave space for future predictions
-            available_for_training = len(X) - target_days
-            if available_for_training < train_window:
-                train_window = max(available_for_training, 30)
+            # Use available data for training, avoiding future data leakage
+            # We need to avoid using future data that hasn't happened yet
+            max_train_index = len(X) - target_days
+            if max_train_index <= 0:
+                st.warning("Not enough historical data for the selected prediction period")
+                return None, None, None
             
-            X_train = X.iloc[-train_window-target_days:-target_days] if len(X) > target_days else X.iloc[-train_window:]
-            y_train = y.iloc[-train_window-target_days:-target_days] if len(y) > target_days else y.iloc[-train_window:]
+            # Use the last train_window days, but not beyond max_train_index
+            start_idx = max(0, max_train_index - train_window)
+            end_idx = max_train_index
+            
+            X_train = X.iloc[start_idx:end_idx]
+            y_train = y.iloc[start_idx:end_idx]
             
             # Ensure we have training data
             if len(X_train) == 0 or len(y_train) == 0:
@@ -2908,23 +2917,31 @@ elif mode == "ML Predictions":
         
         # Train models
         models = {
-            'Random Forest': RandomForestRegressor(n_estimators=100, random_state=42, max_depth=10),
+            'Random Forest': RandomForestRegressor(
+                n_estimators=100, 
+                random_state=42, 
+                max_depth=8,
+                min_samples_split=10,
+                min_samples_leaf=5,
+                max_features='sqrt'
+            ),
             'Linear Regression': LinearRegression(),
-            'Neural Network': MLPRegressor(
-                hidden_layer_sizes=(100, 50, 25),
-                max_iter=1000,
-                random_state=42,
-                early_stopping=True,
-                validation_fraction=0.15,
+            'Lasso': Lasso(
                 alpha=0.01,
-                learning_rate_init=0.001,
-                solver='adam',
-                activation='relu',
-                batch_size='auto',
-                beta_1=0.9,
-                beta_2=0.999,
-                tol=1e-4,
-                n_iter_no_change=20
+                random_state=42,
+                max_iter=1000,
+                tol=1e-3
+            ),
+            'Neural Network': MLPRegressor(
+                hidden_layer_sizes=(10,),
+                max_iter=200,
+                random_state=42,
+                early_stopping=False,
+                alpha=0.5,
+                learning_rate_init=0.01,
+                solver='lbfgs',
+                activation='tanh',
+                tol=1e-2
             )
         }
         
@@ -2950,12 +2967,30 @@ elif mode == "ML Predictions":
         
         for name, model in models.items():
             try:
+                # Special handling for Neural Network with reduced complexity if needed
+                if name == 'Neural Network' and len(X_train) < 60:
+                    # Use even simpler architecture for very small datasets
+                    model = MLPRegressor(
+                        hidden_layer_sizes=(5,),
+                        max_iter=100,
+                        random_state=42,
+                        alpha=0.8,
+                        solver='lbfgs',
+                        activation='tanh',
+                        tol=1e-1
+                    )
+                
                 model.fit(X_train_scaled, y_train)
                 
                 # Predict on the last available features
                 last_features = X.iloc[-1:].fillna(0)
                 last_features_scaled = scaler.transform(last_features)
                 pred = model.predict(last_features_scaled)[0]
+                
+                # Validate prediction - cap extreme values for financial returns
+                if abs(pred) > 1.0:  # More than 100% return is suspicious
+                    pred = np.sign(pred) * min(abs(pred), 0.5)  # Cap at 50%
+                    
                 predictions[name] = pred
                 
                 # Calculate metrics on training data
@@ -2965,7 +3000,9 @@ elif mode == "ML Predictions":
                     'MAE': mean_absolute_error(y_train, train_pred),
                     'R2': r2_score(y_train, train_pred) if len(set(y_train)) > 1 else 0
                 }
+                
             except Exception as e:
+                st.warning(f"Model {name} failed: {str(e)}")
                 predictions[name] = 0
                 metrics[name] = {'MSE': float('inf'), 'MAE': float('inf'), 'R2': 0}
         
@@ -2974,16 +3011,45 @@ elif mode == "ML Predictions":
     # Run predictions for each cryptocurrency
     st.subheader("Individual Asset Predictions")
     
+    # Add debugging information
+    with st.expander("Data Summary", expanded=False):
+        st.write(f"**Selected Assets:** {len(selected_symbols)}")
+        st.write(f"**Date Range:** {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
+        st.write(f"**Available Data Days:** {len(price_data)}")
+        st.write(f"**Training Window:** {train_window} days")
+        st.write(f"**Prediction Period:** {prediction_days} days")
+        
+        # Show data availability for each asset
+        data_summary = []
+        for symbol in selected_symbols:
+            prices = price_data[symbol].dropna()
+            data_summary.append({
+                'Asset': symbol.replace('-USD', ''),
+                'Data Points': len(prices),
+                'Latest Price': f"${prices.iloc[-1]:.2f}" if len(prices) > 0 else "No data",
+                'Status': "✓ Ready" if len(prices) >= train_window + prediction_days else "⚠️ Insufficient"
+            })
+        
+        if data_summary:
+            st.dataframe(pd.DataFrame(data_summary), use_container_width=True, hide_index=True)
+    
     prediction_results = {}
     all_predictions_data = []
     
+    # Progress bar for model training
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
     # Collect all prediction data first
-    for symbol in selected_symbols:
+    for i, symbol in enumerate(selected_symbols):
+        status_text.text(f"Training models for {symbol.replace('-USD', '')}...")
+        progress_bar.progress((i + 1) / len(selected_symbols))
+        
         prices = price_data[symbol]
         predictions, metrics, train_dates = predict_returns(prices, prediction_days, train_window)
         
         if predictions is None:
-            st.warning(f"Insufficient data for {symbol.replace('-USD', '')} predictions")
+            st.warning(f"⚠️ Skipping {symbol.replace('-USD', '')} - insufficient data or training failed")
             continue
         
         prediction_results[symbol] = predictions
@@ -2998,6 +3064,10 @@ elif mode == "ML Predictions":
                 'R2_Score': metrics[model_name]['R2'],
                 'MAE': metrics[model_name]['MAE']
             })
+    
+    # Clear progress indicators
+    progress_bar.empty()
+    status_text.text("✅ Model training completed!")
     
     if not all_predictions_data:
         st.error("❌ No successful predictions were generated for any of the selected cryptocurrencies.")
@@ -3026,6 +3096,7 @@ elif mode == "ML Predictions":
             model_colors = {
                 'Random Forest': '#2E8B57',      # Sea Green
                 'Linear Regression': '#4169E1',  # Royal Blue  
+                'Lasso': '#FF1493',             # Deep Pink
                 'Neural Network': '#FF6347',     # Tomato Red
                 'XGBoost': '#9932CC',           # Dark Orchid
                 'Gradient Boosting': '#FF8C00'  # Dark Orange
@@ -3175,7 +3246,7 @@ elif mode == "ML Predictions":
         
         # Create a more readable table with all models
         table_data = []
-        available_models = ['Random Forest', 'Linear Regression', 'Neural Network']
+        available_models = ['Random Forest', 'Linear Regression', 'Lasso', 'Neural Network']
         if XGBOOST_AVAILABLE:
             available_models.append('XGBoost')
         else:
@@ -3256,7 +3327,7 @@ elif mode == "ML Predictions":
             normalized_weights = {k: 1.0/len(selected_symbols) for k in selected_symbols}
         
         # Calculate portfolio predictions for all available models
-        available_models = ['Random Forest', 'Linear Regression', 'Neural Network']
+        available_models = ['Random Forest', 'Linear Regression', 'Lasso', 'Neural Network']
         if XGBOOST_AVAILABLE:
             available_models.append('XGBoost')
         else:
@@ -3765,15 +3836,22 @@ elif mode == "AI Investment Advisor":
     def run_ml_predictions_for_ai():
         ml_results = {}
         
-        # Feature engineering function (same as ML Predictions mode)
+        # Enhanced feature engineering function with MACD
         def create_features(prices, window=20):
             features = pd.DataFrame()
+            
+            # Price-based features
             features['returns'] = prices.pct_change()
             features['returns_lag1'] = features['returns'].shift(1)
             features['returns_lag2'] = features['returns'].shift(2)
+            features['returns_lag3'] = features['returns'].shift(3)
+            
+            # Moving averages
             features['ma_5'] = prices.rolling(5).mean() / prices
             features['ma_10'] = prices.rolling(10).mean() / prices
             features['ma_20'] = prices.rolling(20).mean() / prices
+            
+            # Volatility features
             features['volatility_5'] = features['returns'].rolling(5).std()
             features['volatility_10'] = features['returns'].rolling(10).std()
             
@@ -3785,8 +3863,20 @@ elif mode == "AI Investment Advisor":
             rsi = 100 - (100 / (1 + rs))
             features['rsi'] = rsi
             
+            # MACD calculation
+            ema_12 = prices.ewm(span=12).mean()
+            ema_26 = prices.ewm(span=26).mean()
+            macd_line = ema_12 - ema_26
+            macd_signal = macd_line.ewm(span=9).mean()
+            macd_histogram = macd_line - macd_signal
+            features['macd'] = macd_line / prices  # Normalized MACD
+            features['macd_signal'] = macd_signal / prices
+            features['macd_histogram'] = macd_histogram / prices
+            
+            # Momentum features
             features['momentum_5'] = prices / prices.shift(5) - 1
             features['momentum_10'] = prices / prices.shift(10) - 1
+            
             return features.dropna()
         
         # ML prediction function (same as ML Predictions mode)
@@ -3809,10 +3899,53 @@ elif mode == "AI Investment Advisor":
             scaler = StandardScaler()
             X_train_scaled = scaler.fit_transform(X_train)
             
+            # Enhanced models including new ML methods
             models = {
-                'Random Forest': RandomForestRegressor(n_estimators=100, random_state=42, max_depth=10),
-                'Linear Regression': LinearRegression()
+                'Random Forest': RandomForestRegressor(
+                n_estimators=100, 
+                random_state=42, 
+                max_depth=8,
+                min_samples_split=10,
+                min_samples_leaf=5,
+                max_features='sqrt'
+            ),
+                'Linear Regression': LinearRegression(),
+                'Lasso': Lasso(
+                    alpha=0.01,
+                    random_state=42,
+                    max_iter=1000,
+                    tol=1e-3
+                ),
+                'Neural Network': MLPRegressor(
+                    hidden_layer_sizes=(20,),
+                    max_iter=300,
+                    random_state=42,
+                    early_stopping=True,
+                    validation_fraction=0.2,
+                    alpha=0.1,
+                    learning_rate_init=0.01,
+                    solver='lbfgs',
+                    activation='tanh',
+                    tol=1e-3
+                )
             }
+            
+            # Add XGBoost if available, otherwise use sklearn GradientBoosting as fallback
+            if XGBOOST_AVAILABLE:
+                models['XGBoost'] = xgb.XGBRegressor(
+                    n_estimators=100,
+                    max_depth=6,
+                    learning_rate=0.1,
+                    random_state=42,
+                    verbosity=0
+                )
+            else:
+                models['Gradient Boosting'] = GradientBoostingRegressor(
+                    n_estimators=100,
+                    max_depth=6,
+                    learning_rate=0.1,
+                    random_state=42
+                )
             
             predictions = {}
             for name, model in models.items():
@@ -3834,15 +3967,42 @@ elif mode == "AI Investment Advisor":
             predictions = predict_returns(prices, 7, 90)
             
             if predictions:
+                # Get all model predictions
                 rf_pred = predictions.get('Random Forest', 0)
                 lr_pred = predictions.get('Linear Regression', 0)
-                ensemble_pred = (rf_pred + lr_pred) / 2
+                nn_pred = predictions.get('Neural Network', 0)
+                
+                # Get boosting model prediction (XGBoost or Gradient Boosting)
+                if XGBOOST_AVAILABLE:
+                    boost_pred = predictions.get('XGBoost', 0)
+                    boost_name = "xgboost_7d"
+                else:
+                    boost_pred = predictions.get('Gradient Boosting', 0)
+                    boost_name = "gradient_boosting_7d"
+                
+                # Calculate ensemble prediction from all models
+                all_predictions = [rf_pred, lr_pred, nn_pred, boost_pred]
+                ensemble_pred = np.mean(all_predictions)
+                
+                # Calculate model agreement using standard deviation
+                model_std = np.std(all_predictions)
+                if model_std < 0.01:
+                    agreement = "Very High"
+                elif model_std < 0.02:
+                    agreement = "High"
+                elif model_std < 0.04:
+                    agreement = "Medium"
+                else:
+                    agreement = "Low"
                 
                 ml_results[asset_name] = {
                     "random_forest_7d": f"{rf_pred:.2%}",
                     "linear_regression_7d": f"{lr_pred:.2%}",
+                    "neural_network_7d": f"{nn_pred:.2%}",
+                    boost_name: f"{boost_pred:.2%}",
                     "ensemble_prediction_7d": f"{ensemble_pred:.2%}",
-                    "model_agreement": "High" if abs(rf_pred - lr_pred) < 0.02 else "Medium" if abs(rf_pred - lr_pred) < 0.05 else "Low"
+                    "model_agreement": agreement,
+                    "prediction_std": f"{model_std:.3f}"
                 }
         
         return ml_results
@@ -3950,7 +4110,9 @@ elif mode == "AI Investment Advisor":
             **Market Performance Data:**
             {json.dumps(analysis_data['market_data'], indent=2)}
             
-            **Machine Learning Predictions (7-day forecasts):**
+            **Machine Learning Predictions (7-day forecasts using 4 models):**
+            Note: Predictions generated using Random Forest, Linear Regression, Neural Network, and XGBoost/Gradient Boosting models.
+            Features include: RSI, MACD (line, signal, histogram), moving averages, momentum indicators, and volatility measures.
             {json.dumps(analysis_data['ml_predictions'], indent=2)}
             
             **Portfolio Optimization Results (Multiple Methods):**
@@ -4108,7 +4270,7 @@ elif mode == "AI Investment Advisor":
                                         </div>
                                         <div style='margin-top: 8px;'>
                                         <span style='background-color: #e9ecef; padding: 2px 6px; border-radius: 4px; font-size: 12px;'>
-                                        {from_pct}% → {to_pct}%
+                                        {from_pct:.1f}% → {to_pct:.1f}%
                                         </span>
                                         <br><small style='color: #6c757d; margin-top: 4px; display: block;'>{reason}</small>
                                         </div>
