@@ -212,10 +212,10 @@ class MarketPredictor:
         predictions = {}
         accuracies = {}
         
-        # Random Forest with optimized parameter grid for time series
+        # Random Forest with expanded parameter grid for time series
         rf_param_grid = {
-            'n_estimators': [50, 100],
-            'max_depth': [5, 10],
+            'n_estimators': [50, 75, 100, 150],
+            'max_depth': [8, 10, 12],
             'min_samples_split': [5, 10],
             'min_samples_leaf': [2, 5],
             'max_features': ['sqrt']
@@ -240,7 +240,7 @@ class MarketPredictor:
         
         # Lasso with EXTREME sparsity-encouraging alpha selection for crypto noise
         lasso_cv = LassoCV(
-            alphas=np.logspace(-2, 2, 50),  # Reduced range: 0.01 to 100, fewer choices
+            alphas=np.logspace(-2, 2, 40),  # Expanded: 0.01 to 100, 40 choices
             cv=cv_splits,
             random_state=42,
             max_iter=3000,  # Fewer iterations for faster execution
@@ -251,60 +251,41 @@ class MarketPredictor:
         models['lasso'] = lasso_cv
         
         # Neural Network with EXTREME sparsity-encouraging regularization for crypto noise
-        # Split into two grids due to solver compatibility issues
-        nn_param_grid_adam = {
-            'hidden_layer_sizes': [(5,), (10,), (8, 5)],  # Smaller networks
-            'alpha': [1.0, 10.0, 50.0],  # EXTREME L2 regularization
-            'learning_rate_init': [0.001, 0.003],  # Lower rates
-            'solver': ['adam'],
+        # Simplified single grid for efficiency
+        nn_param_grid = {
+            'hidden_layer_sizes': [(5,), (10,), (8, 5)],  # Diverse network sizes
+            'alpha': [10.0, 50.0],  # Strong regularization only
+            'solver': ['adam'],  # Single solver for efficiency
             'activation': ['relu'],
             'early_stopping': [True],
             'max_iter': [150]  # Fixed iterations
         }
         
-        nn_param_grid_lbfgs = {
-            'hidden_layer_sizes': [(5,), (10,)],  # Smaller networks
-            'alpha': [1.0, 10.0],  # EXTREME L2 regularization
-            'solver': ['lbfgs'],
-            'activation': ['relu'],
-            'early_stopping': [False],  # lbfgs doesn't support early_stopping
-            'max_iter': [150]  # Fixed iterations
-        }
         
-        
-        # Test both solver types and pick the best
-        best_nn_score = float('-inf')
-        best_nn_model = None
-        
-        for param_grid in [nn_param_grid_adam, nn_param_grid_lbfgs]:
-            nn_grid = GridSearchCV(
-                MLPRegressor(random_state=42, max_iter=1000, tol=1e-4),
-                param_grid,
-                cv=cv_splits,
-                scoring='neg_mean_squared_error',
-                n_jobs=-1,
-                verbose=0
-            )
-            nn_grid.fit(X_train_scaled, y_train)
-            
-            if nn_grid.best_score_ > best_nn_score:
-                best_nn_score = nn_grid.best_score_
-                best_nn_model = nn_grid.best_estimator_
-        
-        models['nn'] = best_nn_model
+        # Single neural network grid search for efficiency
+        nn_grid = GridSearchCV(
+            MLPRegressor(random_state=42, max_iter=1000, tol=1e-4),
+            nn_param_grid,
+            cv=cv_splits,
+            scoring='neg_mean_squared_error',
+            n_jobs=-1,
+            verbose=0
+        )
+        nn_grid.fit(X_train_scaled, y_train)
+        models['nn'] = nn_grid.best_estimator_
         
         # XGBoost with EXTREME sparsity-encouraging regularization for crypto noise
         if XGBOOST_AVAILABLE:
             xgb_param_grid = {
-                'n_estimators': [25, 50],  # Fewer trees
-                'max_depth': [1, 2],  # Ultra-shallow trees for maximum sparsity
-                'learning_rate': [0.01, 0.05],  # Lower rates
-                'subsample': [0.5, 0.7],  # EXTREME subsampling for sparsity
-                'colsample_bytree': [0.4, 0.6],  # EXTREME feature subsampling
-                'reg_alpha': [5.0, 50.0],  # EXTREME L1 for sparsity
-                'reg_lambda': [10.0, 100.0],  # EXTREME L2 regularization
-                'min_child_weight': [10],  # Much higher minimum weights
-                'gamma': [0.5]  # Minimum loss reduction for splits
+                'n_estimators': [30, 50, 75],  # 3 options
+                'max_depth': [2, 3],  # 2 options
+                'learning_rate': [0.01, 0.05],  # 2 options
+                'subsample': [0.6, 0.8],  # 2 options
+                'colsample_bytree': [0.5, 0.7],  # 2 options
+                'reg_alpha': [10.0, 30.0],  # 2 options - Strong L1 regularization
+                'reg_lambda': [100.0],  # 1 option - Fixed strong L2 regularization
+                'min_child_weight': [10],  # Fixed higher minimum weights
+                'gamma': [0.5]  # Fixed minimum loss reduction
             }
             
             
@@ -326,13 +307,13 @@ class MarketPredictor:
         else:
             # Fallback to Gradient Boosting with EXTREME sparsity-encouraging regularization for crypto noise
             gb_param_grid = {
-                'n_estimators': [25, 50],  # Fewer trees
-                'max_depth': [1, 2],  # Ultra-shallow trees for maximum sparsity
-                'learning_rate': [0.01, 0.05],  # Lower learning rates
-                'subsample': [0.5, 0.7],  # EXTREME subsampling for sparsity
-                'min_samples_split': [20],  # Higher minimum samples for splits
-                'min_samples_leaf': [10],  # Higher minimum samples in leaves
-                'max_features': [0.4, 'sqrt']  # EXTREME feature subsampling
+                'n_estimators': [30, 50, 75],  # 3 options
+                'max_depth': [2, 3],  # 2 options
+                'learning_rate': [0.01, 0.05],  # 2 options
+                'subsample': [0.6, 0.8],  # 2 options
+                'min_samples_split': [20],  # 1 option - Fixed higher minimum samples
+                'min_samples_leaf': [8, 12],  # 2 options
+                'max_features': ['sqrt']  # 1 option - Fixed feature subsampling
             }
             
             

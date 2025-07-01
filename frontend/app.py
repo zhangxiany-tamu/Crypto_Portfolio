@@ -3001,13 +3001,13 @@ elif mode == "ML Predictions":
         # Train models with cross-validation
         models = {}
         
-        # Random Forest with CV (moderately expanded grid)
+        # Random Forest with CV (expanded grid)
         rf_param_grid = {
-            'n_estimators': [50, 100, 150],
-            'max_depth': [5, 8, 10],
-            'min_samples_split': [2, 5, 10],
-            'min_samples_leaf': [1, 2, 4],
-            'max_features': ['sqrt', 'log2']
+            'n_estimators': [50, 75, 100, 150],
+            'max_depth': [8, 10, 12],
+            'min_samples_split': [5, 10],
+            'min_samples_leaf': [2, 5],
+            'max_features': ['sqrt']
         }
         
         rf_grid = GridSearchCV(
@@ -3028,7 +3028,7 @@ elif mode == "ML Predictions":
         # Lasso with CV (expanded alpha range)
         from sklearn.linear_model import LassoCV
         lasso_cv = LassoCV(
-            alphas=np.logspace(-3, 2, 40),  # Doubled from 20 to 40 alpha values
+            alphas=np.logspace(-2, 2, 40),  # Expanded: 40 alpha values
             cv=cv_splits,
             random_state=42,
             max_iter=2000,
@@ -3042,13 +3042,13 @@ elif mode == "ML Predictions":
         # XGBoost/Gradient Boosting with CV (moderately expanded grid)
         if XGBOOST_AVAILABLE:
             xgb_param_grid = {
-                'n_estimators': [25, 50, 100],
-                'max_depth': [1, 2, 3],
-                'learning_rate': [0.01, 0.03, 0.05],
-                'subsample': [0.5, 0.7],
-                'colsample_bytree': [0.4, 0.6],
-                'reg_alpha': [5.0, 50.0],
-                'reg_lambda': [10.0, 100.0]
+                'n_estimators': [30, 50, 75],
+                'max_depth': [2, 3],
+                'learning_rate': [0.01, 0.05],
+                'subsample': [0.6, 0.8],
+                'colsample_bytree': [0.5, 0.7],
+                'reg_alpha': [10.0, 30.0],
+                'reg_lambda': [100.0]
             }
             
             xgb_grid = GridSearchCV(
@@ -3063,13 +3063,13 @@ elif mode == "ML Predictions":
             models['XGBoost'] = xgb_grid.best_estimator_
         else:
             gb_param_grid = {
-                'n_estimators': [25, 50, 100],
-                'max_depth': [1, 2, 3],
-                'learning_rate': [0.01, 0.03, 0.05],
-                'subsample': [0.5, 0.7],
-                'min_samples_split': [15, 25],
-                'min_samples_leaf': [8, 15],
-                'max_features': [0.4, 'sqrt']
+                'n_estimators': [30, 50, 75],
+                'max_depth': [2, 3],
+                'learning_rate': [0.01, 0.05],
+                'subsample': [0.6, 0.8],
+                'min_samples_split': [20],
+                'min_samples_leaf': [8, 12],
+                'max_features': ['sqrt']
             }
             
             gb_grid = GridSearchCV(
