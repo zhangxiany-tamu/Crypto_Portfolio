@@ -20,7 +20,7 @@ from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.linear_model import LinearRegression, Lasso
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-from sklearn.neural_network import MLPRegressor
+# MLPRegressor removed due to convergence issues
 try:
     import xgboost as xgb
     XGBOOST_AVAILABLE = True
@@ -35,6 +35,25 @@ warnings.filterwarnings('ignore')
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from portfolio_optimizer import PortfolioOptimizer
 from enhanced_crypto_loader import EnhancedCryptoLoader
+
+# Add backend/core to path for ML imports
+sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'backend', 'core'))
+from market_predictor import MarketPredictor
+
+# Data manager adapter for MarketPredictor
+class AppDataManager:
+    def __init__(self, crypto_loader):
+        self.crypto_loader = crypto_loader
+    
+    async def get_price_data(self, symbols, start_date, end_date):
+        """Adapter to get price data in the format expected by MarketPredictor"""
+        try:
+            # Use the crypto loader to get real data
+            data = self.crypto_loader.get_real_data(symbols, start_date, end_date)
+            return data
+        except Exception as e:
+            print(f"Error loading price data: {e}")
+            return {}
 
 # Initialize session state for theme - default to light mode
 if 'theme' not in st.session_state:
@@ -1525,9 +1544,55 @@ if mode == "Market Insights":
         
         with tab1:
             # Price distribution analysis
-            col1, col2 = st.columns([2, 1])
+            col1, col2 = st.columns([1, 2])
             
             with col1:
+                # Calculate statistics
+                price_mean = coin_data.mean()
+                price_std = coin_data.std()
+                price_min = coin_data.min()
+                price_max = coin_data.max()
+                price_median = coin_data.median()
+                price_range = price_max - price_min
+                price_skewness = coin_data.skew()
+                price_kurtosis = coin_data.kurtosis()
+                price_25 = coin_data.quantile(0.25)
+                price_75 = coin_data.quantile(0.75)
+                current_price = coin_data.iloc[-1]
+                cv = (price_std / price_mean) * 100
+                distance_from_mean = abs(current_price - price_mean) / price_std
+                percentile_rank = (coin_data <= current_price).mean() * 100
+                
+                # Compact key metrics with shorter labels
+                st.markdown("### Key Metrics")
+                metric_col1, metric_col2 = st.columns(2)
+                with metric_col1:
+                    st.metric("Price", f"${current_price:.2f}")
+                    st.metric("Avg", f"${price_mean:.2f}")
+                    st.metric("Range", f"${price_range:.0f}")
+                with metric_col2:
+                    st.metric("Mid", f"${price_median:.2f}")
+                    st.metric("StdDev", f"${price_std:.0f}")
+                    st.metric("CV%", f"{cv:.1f}")
+                
+                # Risk assessment with visual indicator
+                if distance_from_mean > 2:
+                    risk_color = "🔴"
+                    risk_text = "High deviation"
+                elif distance_from_mean > 1:
+                    risk_color = "🟡"
+                    risk_text = "Moderate deviation"
+                else:
+                    risk_color = "🟢"
+                    risk_text = "Normal range"
+                
+                st.markdown("### Assessment")
+                st.markdown(f"""
+                **Position**: {percentile_rank:.0f}th percentile  
+                **Status**: {risk_color} {risk_text} ({distance_from_mean:.1f}σ)
+                """)
+            
+            with col2:
                 # Price histogram with overlays
                 fig_hist = go.Figure()
                 
@@ -1603,69 +1668,77 @@ if mode == "Market Insights":
                 )
                 st.plotly_chart(fig_hist, use_container_width=True)
                 
-                # Box plot for price distribution
-                fig_box = go.Figure()
-                fig_box.add_trace(go.Box(
+                # Violin plot for price distribution
+                fig_violin = go.Figure()
+                fig_violin.add_trace(go.Violin(
                     y=coin_data,
                     name=f"{coin_name}",
-                    boxpoints='outliers',
-                    marker_color='lightcoral'
+                    fillcolor='lightcoral',
+                    line=dict(color='darkred'),
+                    opacity=0.6,
+                    points='outliers'
                 ))
-                fig_box.update_layout(
-                    title=f"{coin_name} Price Box Plot (Outlier Detection)",
+                fig_violin.update_layout(
+                    title=f"{coin_name} Price Distribution (Outlier Detection)",
                     yaxis_title="Price (USD)",
-                    height=300
+                    height=300,
+                    showlegend=False
                 )
-                st.plotly_chart(fig_box, use_container_width=True)
+                st.plotly_chart(fig_violin, use_container_width=True)
+        
+        with tab2:
+            # Returns distribution analysis
+            col1, col2 = st.columns([1, 2])
             
-            with col2:
+            with col1:
                 # Calculate statistics
-                price_std = coin_data.std()
-                price_min = coin_data.min()
-                price_max = coin_data.max()
-                price_range = price_max - price_min
-                price_skewness = coin_data.skew()
-                price_kurtosis = coin_data.kurtosis()
-                price_25 = coin_data.quantile(0.25)
-                price_75 = coin_data.quantile(0.75)
-                cv = (price_std / price_mean) * 100
-                distance_from_mean = abs(current_price - price_mean) / price_std
-                percentile_rank = (coin_data <= current_price).mean() * 100
+                returns_mean = coin_returns.mean()
+                returns_std = coin_returns.std()
+                returns_min = coin_returns.min()
+                returns_max = coin_returns.max()
+                returns_median = coin_returns.median()
+                returns_range = returns_max - returns_min
+                returns_skewness = coin_returns.skew()
+                returns_kurtosis = coin_returns.kurtosis()
+                returns_25 = coin_returns.quantile(0.25)
+                returns_75 = coin_returns.quantile(0.75)
+                returns_cv = (returns_std / abs(returns_mean)) * 100 if returns_mean != 0 else 0
                 
                 # Compact key metrics with shorter labels
                 st.markdown("### Key Metrics")
                 metric_col1, metric_col2 = st.columns(2)
                 with metric_col1:
-                    st.metric("Price", f"${current_price:.2f}")
-                    st.metric("Avg", f"${price_mean:.2f}")
-                    st.metric("Range", f"${price_range:.0f}")
+                    st.metric("Mean", f"{returns_mean:.3f}")
+                    st.metric("Min", f"{returns_min:.2%}")
+                    st.metric("Range", f"{returns_range:.3f}")
                 with metric_col2:
-                    st.metric("Mid", f"${price_median:.2f}")
-                    st.metric("StdDev", f"${price_std:.0f}")
-                    st.metric("CV%", f"{cv:.1f}")
+                    st.metric("Median", f"{returns_median:.3f}")
+                    st.metric("Max", f"{returns_max:.2%}")
+                    st.metric("StdDev", f"{returns_std:.3f}")
                 
-                # Risk assessment with visual indicator
-                if distance_from_mean > 2:
-                    risk_color = "🔴"
-                    risk_text = "High deviation"
-                elif distance_from_mean > 1:
-                    risk_color = "🟡"
-                    risk_text = "Moderate deviation"
+                # Volatility assessment
+                annualized_vol = returns_std * (252 ** 0.5)
+                if annualized_vol > 1.0:
+                    vol_color = "🔴"
+                    vol_text = "Very high volatility"
+                elif annualized_vol > 0.5:
+                    vol_color = "🟡"
+                    vol_text = "High volatility"
                 else:
-                    risk_color = "🟢"
-                    risk_text = "Normal range"
+                    vol_color = "🟢"
+                    vol_text = "Moderate volatility"
+                
+                # Sharpe ratio (assuming risk-free rate of 0)
+                sharpe = returns_mean / returns_std * (252 ** 0.5) if returns_std > 0 else 0
                 
                 st.markdown("### Assessment")
                 st.markdown(f"""
-                **Position**: {percentile_rank:.0f}th percentile  
-                **Status**: {risk_color} {risk_text} ({distance_from_mean:.1f}σ)
+                **Volatility**: {vol_color} {vol_text}  
+                **Annualized Vol**: {annualized_vol:.1%}  
+                **Sharpe Ratio**: {sharpe:.2f}
                 """)
-        
-        with tab2:
-            # Returns distribution analysis
-            col1, col2 = st.columns([2, 1])
             
-            with col1:
+            with col2:
                 # Returns histogram with overlays
                 fig_returns = go.Figure()
                 
@@ -1740,66 +1813,23 @@ if mode == "Market Insights":
                 )
                 st.plotly_chart(fig_returns, use_container_width=True)
                 
-                # Box plot for returns distribution
-                fig_box_returns = go.Figure()
-                fig_box_returns.add_trace(go.Box(
+                # Violin plot for returns distribution
+                fig_violin_returns = go.Figure()
+                fig_violin_returns.add_trace(go.Violin(
                     y=coin_returns,
                     name=f"{coin_name}",
-                    boxpoints='outliers',
-                    marker_color='lightcoral'
+                    fillcolor='lightcoral',
+                    line=dict(color='darkred'),
+                    opacity=0.6,
+                    points='outliers'
                 ))
-                fig_box_returns.update_layout(
-                    title=f"{coin_name} Returns Box Plot (Outlier Detection)",
+                fig_violin_returns.update_layout(
+                    title=f"{coin_name} Returns Distribution (Outlier Detection)",
                     yaxis_title="Daily Return",
-                    height=300
+                    height=300,
+                    showlegend=False
                 )
-                st.plotly_chart(fig_box_returns, use_container_width=True)
-            
-            with col2:
-                # Calculate statistics
-                returns_std = coin_returns.std()
-                returns_min = coin_returns.min()
-                returns_max = coin_returns.max()
-                returns_range = returns_max - returns_min
-                returns_skewness = coin_returns.skew()
-                returns_kurtosis = coin_returns.kurtosis()
-                returns_25 = coin_returns.quantile(0.25)
-                returns_75 = coin_returns.quantile(0.75)
-                returns_cv = (returns_std / abs(returns_mean)) * 100 if returns_mean != 0 else 0
-                
-                # Compact key metrics with shorter labels
-                st.markdown("### Key Metrics")
-                metric_col1, metric_col2 = st.columns(2)
-                with metric_col1:
-                    st.metric("Mean", f"{returns_mean:.3f}")
-                    st.metric("Min", f"{returns_min:.2%}")
-                    st.metric("Range", f"{returns_range:.3f}")
-                with metric_col2:
-                    st.metric("Median", f"{returns_median:.3f}")
-                    st.metric("Max", f"{returns_max:.2%}")
-                    st.metric("StdDev", f"{returns_std:.3f}")
-                
-                # Volatility assessment
-                annualized_vol = returns_std * (252 ** 0.5)
-                if annualized_vol > 1.0:
-                    vol_color = "🔴"
-                    vol_text = "Very high volatility"
-                elif annualized_vol > 0.5:
-                    vol_color = "🟡"
-                    vol_text = "High volatility"
-                else:
-                    vol_color = "🟢"
-                    vol_text = "Moderate volatility"
-                
-                # Sharpe ratio (assuming risk-free rate of 0)
-                sharpe = returns_mean / returns_std * (252 ** 0.5) if returns_std > 0 else 0
-                
-                st.markdown("### Assessment")
-                st.markdown(f"""
-                **Volatility**: {vol_color} {vol_text}  
-                **Annualized Vol**: {annualized_vol:.1%}  
-                **Sharpe Ratio**: {sharpe:.2f}
-                """)
+                st.plotly_chart(fig_violin_returns, use_container_width=True)
         
         with tab3:
             # Technical indicators
@@ -2798,11 +2828,49 @@ elif mode == "ML Predictions":
         st.warning("⚠️ Please select cryptocurrencies in the sidebar to run ML predictions.")
         st.stop()
     
-    # Get cached data
+    
+    # ML Configuration in sidebar
+    st.sidebar.subheader("ML Configuration")
+    prediction_days = st.sidebar.slider("Prediction Period (days)", 1, 30, 3)
+    train_window = st.sidebar.slider("Training Window (days)", 60, 500, 250)
+    
+    # Calculate CV requirements and show warnings (validation window = prediction period)
+    validation_window = prediction_days  # Validation window should match prediction period
+    min_train_size = max(120, train_window // 2)
+    required_min_data = min_train_size + (validation_window * 3)
+    
+    # Cross-validation info
+    with st.sidebar.expander("📊 Cross-Validation Info", expanded=False):
+        st.write(f"**Validation window:** {validation_window} days")
+        st.write(f"**Recommended minimum:** {required_min_data} days")
+        
+        if train_window < 120:
+            st.error(f"❌ Training window ({train_window} days) is below minimum requirement (120 days). Increase to at least 120 days for reliable results.")
+        elif train_window < required_min_data:
+            st.warning(f"⚠️ Training window ({train_window} days) is below recommended minimum ({required_min_data} days) for robust cross-validation with {prediction_days}-day predictions.")
+        elif train_window < 180:
+            st.info(f"💡 For more robust model validation, consider using 180+ days of training data.")
+        elif train_window >= 365:
+            st.info(f"📈 Large training window ({train_window} days) selected - automatically loading extended historical data for robust training.")
+        else:
+            st.success(f"✅ Training window is excellent for robust cross-validation ({train_window} days) with {prediction_days}-day validation periods.")
+    
+    # Calculate extended data range for ML training (after ML config is defined)
+    # Need extra data to account for: feature engineering loss (~25 days) + training window + prediction buffer
+    feature_engineering_buffer = 30  # Conservative buffer for technical indicators
+    ml_buffer_days = max(0, train_window + prediction_days + feature_engineering_buffer - (end_date - start_date).days)
+    
+    # Extend start date if needed for large training windows
+    ml_start_date = start_date - timedelta(days=ml_buffer_days) if ml_buffer_days > 0 else start_date
+    
+    if ml_buffer_days > 0:
+        st.info(f"📈 Loading additional {ml_buffer_days} days of historical data to support {train_window}-day training window")
+    
+    # Get cached data with extended range
     try:
         price_data, returns = get_cached_data(
             selected_symbols, 
-            start_date.strftime('%Y-%m-%d'), 
+            ml_start_date.strftime('%Y-%m-%d'), 
             end_date.strftime('%Y-%m-%d')
         )
         
@@ -2813,16 +2881,12 @@ elif mode == "ML Predictions":
             st.stop()
             
         # Display data info
-        st.info(f"Loaded data for {len(selected_symbols)} cryptocurrencies from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')} ({len(price_data)} days)")
+        total_days_loaded = (end_date - ml_start_date).days
+        st.info(f"📊 Loaded data for {len(selected_symbols)} cryptocurrencies from {ml_start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')} ({total_days_loaded} days)")
         
     except Exception as e:
         st.error(f"❌ Error loading data: {str(e)}")
         st.stop()
-    
-    # ML Configuration in sidebar
-    st.sidebar.subheader("ML Configuration")
-    prediction_days = st.sidebar.slider("Prediction Period (days)", 1, 30, 7)
-    train_window = st.sidebar.slider("Training Window (days)", 30, 365, 90)
     
     # Feature engineering function
     def create_features(prices, window=20):
@@ -2880,9 +2944,15 @@ elif mode == "ML Predictions":
             X = X[mask].fillna(0)
             y = y[mask].fillna(0)
             
-            # Check if we have enough data
-            if len(X) < max(train_window, 30):
-                st.warning(f"Insufficient data for training. Need at least {max(train_window, 30)} days, got {len(X)}")
+            # Check if we have enough data (accounting for feature engineering losses)
+            # Feature engineering typically loses ~20-25 days due to moving averages, RSI, etc.
+            feature_engineering_loss = 25  # Conservative estimate
+            effective_train_window = max(train_window - feature_engineering_loss, 30)
+            
+            if len(X) < effective_train_window:
+                actual_available = len(X) + feature_engineering_loss  # Estimate original data size
+                st.warning(f"Insufficient data for training. Need at least {train_window} days, got ~{actual_available} days after feature engineering.")
+                st.info(f"💡 Try reducing training window to {len(X) + feature_engineering_loss - 10} days or loading more historical data.")
                 return None, None, None
             
             # Use available data for training, avoiding future data leakage
@@ -2915,72 +2985,110 @@ elif mode == "ML Predictions":
         scaler = StandardScaler()
         X_train_scaled = scaler.fit_transform(X_train)
         
-        # Train models
-        models = {
-            'Random Forest': RandomForestRegressor(
-                n_estimators=100, 
-                random_state=42, 
-                max_depth=8,
-                min_samples_split=10,
-                min_samples_leaf=5,
-                max_features='sqrt'
-            ),
-            'Linear Regression': LinearRegression(),
-            'Lasso': Lasso(
-                alpha=0.01,
-                random_state=42,
-                max_iter=1000,
-                tol=1e-3
-            ),
-            'Neural Network': MLPRegressor(
-                hidden_layer_sizes=(10,),
-                max_iter=200,
-                random_state=42,
-                early_stopping=False,
-                alpha=0.5,
-                learning_rate_init=0.01,
-                solver='lbfgs',
-                activation='tanh',
-                tol=1e-2
-            )
+        # Configure time series cross-validation with CV information display
+        from sklearn.model_selection import GridSearchCV, TimeSeriesSplit
+        
+        validation_window = target_days
+        min_train_size = max(60, len(X_train) // 2)
+        
+        # Use TimeSeriesSplit for cross-validation
+        n_splits = min(5, max(3, len(X_train) // 30))
+        tscv = TimeSeriesSplit(n_splits=n_splits)
+        cv_splits = list(tscv.split(X_train))
+        
+        # CV information will be displayed once before training starts
+        
+        # Train models with cross-validation
+        models = {}
+        
+        # Random Forest with CV (moderately expanded grid)
+        rf_param_grid = {
+            'n_estimators': [50, 100, 150],
+            'max_depth': [5, 8, 10],
+            'min_samples_split': [2, 5, 10],
+            'min_samples_leaf': [1, 2, 4],
+            'max_features': ['sqrt', 'log2']
         }
         
-        # Add XGBoost if available, otherwise use sklearn GradientBoosting as fallback
+        rf_grid = GridSearchCV(
+            RandomForestRegressor(random_state=42, n_jobs=-1),
+            rf_param_grid,
+            cv=cv_splits,
+            scoring='neg_mean_squared_error',
+            n_jobs=-1,
+            verbose=0
+        )
+        rf_grid.fit(X_train_scaled, y_train)
+        models['Random Forest'] = rf_grid.best_estimator_
+        
+        # Linear Regression (no hyperparameters to tune)
+        models['Linear Regression'] = LinearRegression()
+        models['Linear Regression'].fit(X_train_scaled, y_train)
+        
+        # Lasso with CV (expanded alpha range)
+        from sklearn.linear_model import LassoCV
+        lasso_cv = LassoCV(
+            alphas=np.logspace(-3, 2, 40),  # Doubled from 20 to 40 alpha values
+            cv=cv_splits,
+            random_state=42,
+            max_iter=2000,
+            selection='random'  # Add random coordinate selection for sparsity
+        )
+        lasso_cv.fit(X_train_scaled, y_train)
+        models['Lasso'] = lasso_cv
+        
+        # Neural Network removed due to convergence issues on small financial datasets
+        
+        # XGBoost/Gradient Boosting with CV (moderately expanded grid)
         if XGBOOST_AVAILABLE:
-            models['XGBoost'] = xgb.XGBRegressor(
-                n_estimators=100,
-                max_depth=6,
-                learning_rate=0.1,
-                random_state=42,
-                verbosity=0
+            xgb_param_grid = {
+                'n_estimators': [25, 50, 100],
+                'max_depth': [1, 2, 3],
+                'learning_rate': [0.01, 0.03, 0.05],
+                'subsample': [0.5, 0.7],
+                'colsample_bytree': [0.4, 0.6],
+                'reg_alpha': [5.0, 50.0],
+                'reg_lambda': [10.0, 100.0]
+            }
+            
+            xgb_grid = GridSearchCV(
+                xgb.XGBRegressor(random_state=42, verbosity=0),
+                xgb_param_grid,
+                cv=cv_splits,
+                scoring='neg_mean_squared_error',
+                n_jobs=-1,
+                verbose=0
             )
+            xgb_grid.fit(X_train_scaled, y_train)
+            models['XGBoost'] = xgb_grid.best_estimator_
         else:
-            models['Gradient Boosting'] = GradientBoostingRegressor(
-                n_estimators=100,
-                max_depth=6,
-                learning_rate=0.1,
-                random_state=42
+            gb_param_grid = {
+                'n_estimators': [25, 50, 100],
+                'max_depth': [1, 2, 3],
+                'learning_rate': [0.01, 0.03, 0.05],
+                'subsample': [0.5, 0.7],
+                'min_samples_split': [15, 25],
+                'min_samples_leaf': [8, 15],
+                'max_features': [0.4, 'sqrt']
+            }
+            
+            gb_grid = GridSearchCV(
+                GradientBoostingRegressor(random_state=42),
+                gb_param_grid,
+                cv=cv_splits,
+                scoring='neg_mean_squared_error',
+                n_jobs=-1,
+                verbose=0
             )
+            gb_grid.fit(X_train_scaled, y_train)
+            models['Gradient Boosting'] = gb_grid.best_estimator_
         
         predictions = {}
         metrics = {}
         
         for name, model in models.items():
             try:
-                # Special handling for Neural Network with reduced complexity if needed
-                if name == 'Neural Network' and len(X_train) < 60:
-                    # Use even simpler architecture for very small datasets
-                    model = MLPRegressor(
-                        hidden_layer_sizes=(5,),
-                        max_iter=100,
-                        random_state=42,
-                        alpha=0.8,
-                        solver='lbfgs',
-                        activation='tanh',
-                        tol=1e-1
-                    )
-                
-                model.fit(X_train_scaled, y_train)
+                # All models are already fitted with cross-validation above
                 
                 # Predict on the last available features
                 last_features = X.iloc[-1:].fillna(0)
@@ -3036,6 +3144,14 @@ elif mode == "ML Predictions":
     prediction_results = {}
     all_predictions_data = []
     
+    # Display CV information once before training starts
+    st.info(f"🔄 Using time series cross-validation for hyperparameter tuning across all cryptocurrencies...")
+    
+    # Store the prediction period used for training (for AI analysis)
+    if 'prediction_results' not in st.session_state:
+        st.session_state.prediction_results = {}
+    st.session_state.ml_prediction_days = prediction_days
+    
     # Progress bar for model training
     progress_bar = st.progress(0)
     status_text = st.empty()
@@ -3053,6 +3169,9 @@ elif mode == "ML Predictions":
             continue
         
         prediction_results[symbol] = predictions
+        
+        # Store predictions in session state for AI analysis
+        st.session_state.prediction_results[symbol] = predictions
         
         # Collect data for visualization
         asset_name = symbol.replace('-USD', '')
@@ -3092,12 +3211,11 @@ elif mode == "ML Predictions":
         
         with col1:
             # Enhanced bar chart for predictions by asset and model
-            # Define professional color palette for all models
+            # Define professional color palette for all models (Neural Network removed)
             model_colors = {
                 'Random Forest': '#2E8B57',      # Sea Green
                 'Linear Regression': '#4169E1',  # Royal Blue  
                 'Lasso': '#FF1493',             # Deep Pink
-                'Neural Network': '#FF6347',     # Tomato Red
                 'XGBoost': '#9932CC',           # Dark Orchid
                 'Gradient Boosting': '#FF8C00'  # Dark Orange
             }
@@ -3198,10 +3316,13 @@ elif mode == "ML Predictions":
                     rf_pred = prediction_results[symbol].get('Random Forest', 0)
                     lr_pred = prediction_results[symbol].get('Linear Regression', 0)
                     
-                    # Calculate agreement metrics
+                    # Calculate agreement metrics using relative difference
                     avg_pred = (rf_pred + lr_pred) / 2
-                    agreement_score = 1 - abs(rf_pred - lr_pred) / max(abs(avg_pred), 0.01)
-                    agreement_score = max(0, min(1, agreement_score)) * 100  # Convert to 0-100%
+                    if abs(avg_pred) > 0.001:  # Avoid division by very small numbers
+                        relative_diff = abs(rf_pred - lr_pred) / abs(avg_pred)
+                        agreement_score = max(0, (1 - relative_diff)) * 100  # Convert to 0-100%
+                    else:
+                        agreement_score = 0  # Uncertain when predictions are near zero
                     
                     agreement_data.append({
                         'Asset': asset_name,
@@ -3235,8 +3356,9 @@ elif mode == "ML Predictions":
                     height=400,
                     xaxis_title="Cryptocurrency",
                     yaxis_title="Model Agreement (%)",
-                    yaxis=dict(range=[0, 105]),
-                    showlegend=False
+                    yaxis=dict(range=[0, 115]),  # Increased upper limit to show 100% labels
+                    showlegend=False,
+                    margin=dict(t=40, b=40, l=60, r=20)  # Adjusted margins for better text display
                 )
                 
                 st.plotly_chart(fig_agreement, use_container_width=True)
@@ -3246,7 +3368,7 @@ elif mode == "ML Predictions":
         
         # Create a more readable table with all models
         table_data = []
-        available_models = ['Random Forest', 'Linear Regression', 'Lasso', 'Neural Network']
+        available_models = ['Random Forest', 'Linear Regression', 'Lasso']
         if XGBOOST_AVAILABLE:
             available_models.append('XGBoost')
         else:
@@ -3327,7 +3449,7 @@ elif mode == "ML Predictions":
             normalized_weights = {k: 1.0/len(selected_symbols) for k in selected_symbols}
         
         # Calculate portfolio predictions for all available models
-        available_models = ['Random Forest', 'Linear Regression', 'Lasso', 'Neural Network']
+        available_models = ['Random Forest', 'Linear Regression', 'Lasso']
         if XGBOOST_AVAILABLE:
             available_models.append('XGBoost')
         else:
@@ -3704,6 +3826,18 @@ elif mode == "AI Investment Advisor":
         ["Short-term (1-3 months)", "Medium-term (3-12 months)", "Long-term (1+ years)"]
     )
     
+    # Show the actual prediction period from trained models (read-only)
+    if hasattr(st.session_state, 'prediction_results') and st.session_state.prediction_results:
+        # Try to extract the actual prediction period from session state
+        # For now, we'll check if there's a way to get it, otherwise default to common values
+        prediction_days = getattr(st.session_state, 'ml_prediction_days', 7)  # Get actual training period
+        st.sidebar.info(f"📊 Using ML models trained for **{prediction_days}-day** predictions")
+        st.sidebar.caption("💡 To change prediction period, retrain models in ML Predictions section")
+    else:
+        prediction_days = 7  # Default fallback
+        st.sidebar.warning("⚠️ No ML predictions available")
+        st.sidebar.caption("👉 Run ML Predictions first to get CV-tuned results")
+    
     # Current Portfolio Definition
     st.subheader("Define Your Current Portfolio")
     
@@ -3841,178 +3975,78 @@ elif mode == "AI Investment Advisor":
         except Exception as e:
             return f"Error calling Gemini API: {str(e)}"
     
-    # Advanced ML prediction function for AI analysis
-    def run_ml_predictions_for_ai():
+    # ML predictions for AI analysis - Use CV-tuned predictions from main ML section
+    def run_ml_predictions_for_ai(prediction_days):
         ml_results = {}
         
-        # Enhanced feature engineering function with MACD
-        def create_features(prices, window=20):
-            features = pd.DataFrame()
-            
-            # Price-based features
-            features['returns'] = prices.pct_change()
-            features['returns_lag1'] = features['returns'].shift(1)
-            features['returns_lag2'] = features['returns'].shift(2)
-            features['returns_lag3'] = features['returns'].shift(3)
-            
-            # Moving averages
-            features['ma_5'] = prices.rolling(5).mean() / prices
-            features['ma_10'] = prices.rolling(10).mean() / prices
-            features['ma_20'] = prices.rolling(20).mean() / prices
-            
-            # Volatility features
-            features['volatility_5'] = features['returns'].rolling(5).std()
-            features['volatility_10'] = features['returns'].rolling(10).std()
-            
-            # RSI calculation
-            delta = prices.diff()
-            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-            rs = gain / loss
-            rsi = 100 - (100 / (1 + rs))
-            features['rsi'] = rsi
-            
-            # MACD calculation
-            ema_12 = prices.ewm(span=12).mean()
-            ema_26 = prices.ewm(span=26).mean()
-            macd_line = ema_12 - ema_26
-            macd_signal = macd_line.ewm(span=9).mean()
-            macd_histogram = macd_line - macd_signal
-            features['macd'] = macd_line / prices  # Normalized MACD
-            features['macd_signal'] = macd_signal / prices
-            features['macd_histogram'] = macd_histogram / prices
-            
-            # Momentum features
-            features['momentum_5'] = prices / prices.shift(5) - 1
-            features['momentum_10'] = prices / prices.shift(10) - 1
-            
-            return features.dropna()
-        
-        # ML prediction function (same as ML Predictions mode)
-        def predict_returns(prices, target_days=7, train_window=90):
-            features = create_features(prices)
-            target = prices.shift(-target_days) / prices - 1
-            valid_idx = features.index.intersection(target.index)
-            X = features.loc[valid_idx].fillna(0)
-            y = target.loc[valid_idx].fillna(0)
-            
-            if len(X) < train_window:
-                return None
-            
-            X_train = X.iloc[-train_window:-target_days] if len(X) > target_days else X.iloc[:-target_days]
-            y_train = y.iloc[-train_window:-target_days] if len(y) > target_days else y.iloc[:-target_days]
-            
-            if len(X_train) < 20:
-                return None
-            
-            scaler = StandardScaler()
-            X_train_scaled = scaler.fit_transform(X_train)
-            
-            # Enhanced models including new ML methods
-            models = {
-                'Random Forest': RandomForestRegressor(
-                n_estimators=100, 
-                random_state=42, 
-                max_depth=8,
-                min_samples_split=10,
-                min_samples_leaf=5,
-                max_features='sqrt'
-            ),
-                'Linear Regression': LinearRegression(),
-                'Lasso': Lasso(
-                    alpha=0.01,
-                    random_state=42,
-                    max_iter=1000,
-                    tol=1e-3
-                ),
-                'Neural Network': MLPRegressor(
-                    hidden_layer_sizes=(20,),
-                    max_iter=300,
-                    random_state=42,
-                    early_stopping=True,
-                    validation_fraction=0.2,
-                    alpha=0.1,
-                    learning_rate_init=0.01,
-                    solver='lbfgs',
-                    activation='tanh',
-                    tol=1e-3
-                )
-            }
-            
-            # Add XGBoost if available, otherwise use sklearn GradientBoosting as fallback
-            if XGBOOST_AVAILABLE:
-                models['XGBoost'] = xgb.XGBRegressor(
-                    n_estimators=100,
-                    max_depth=6,
-                    learning_rate=0.1,
-                    random_state=42,
-                    verbosity=0
-                )
+        try:
+            # Check if we have CV-tuned predictions from the main ML section
+            if hasattr(st.session_state, 'prediction_results') and st.session_state.prediction_results:
+                # Use the CV-tuned predictions from session state
+                cv_predictions = st.session_state.prediction_results
+                
+                for symbol in selected_symbols:
+                    asset_name = symbol.replace('-USD', '')
+                    if symbol in cv_predictions:
+                        pred_data = cv_predictions[symbol]
+                        
+                        # Extract individual model predictions
+                        rf_pred = pred_data.get('Random Forest', 0)
+                        lr_pred = pred_data.get('Linear Regression', 0)
+                        lasso_pred = pred_data.get('Lasso', 0)
+                        
+                        # Get boosting prediction (XGBoost or Gradient Boosting)
+                        if 'XGBoost' in pred_data:
+                            boost_pred = pred_data['XGBoost']
+                            boost_name = f"xgboost_{prediction_days}d"
+                        else:
+                            boost_pred = pred_data.get('Gradient Boosting', 0)
+                            boost_name = f"gradient_boosting_{prediction_days}d"
+                        
+                        ensemble_pred = pred_data.get('Ensemble', np.mean([rf_pred, lr_pred, boost_pred]))
+                        
+                        # Calculate model agreement using coefficient of variation
+                        all_predictions = [rf_pred, lr_pred, boost_pred]
+                        mean_pred = np.mean(all_predictions)
+                        model_std = np.std(all_predictions)
+                        
+                        if abs(mean_pred) > 0.001:
+                            cv = model_std / abs(mean_pred)
+                            if cv < 0.05:
+                                agreement = "Very High"
+                            elif cv < 0.10:
+                                agreement = "High"
+                            elif cv < 0.20:
+                                agreement = "Medium"
+                            else:
+                                agreement = "Low"
+                        else:
+                            agreement = "Uncertain"
+                        
+                        ml_results[asset_name] = {
+                            f"random_forest_{prediction_days}d": f"{rf_pred:.2%}",
+                            f"linear_regression_{prediction_days}d": f"{lr_pred:.2%}",
+                            f"lasso_{prediction_days}d": f"{lasso_pred:.2%}",
+                            boost_name: f"{boost_pred:.2%}",
+                            f"ensemble_prediction_{prediction_days}d": f"{ensemble_pred:.2%}",
+                            "model_agreement": agreement,
+                            "prediction_std": f"{model_std:.3f}",
+                            "cv_tuned": "Yes"  # Indicate these are CV-tuned predictions
+                        }
             else:
-                models['Gradient Boosting'] = GradientBoostingRegressor(
-                    n_estimators=100,
-                    max_depth=6,
-                    learning_rate=0.1,
-                    random_state=42
-                )
-            
-            predictions = {}
-            for name, model in models.items():
-                try:
-                    model.fit(X_train_scaled, y_train)
-                    last_features = X.iloc[-1:].fillna(0)
-                    last_features_scaled = scaler.transform(last_features)
-                    pred = model.predict(last_features_scaled)[0]
-                    predictions[name] = pred
-                except:
-                    predictions[name] = 0
-            
-            return predictions
-        
-        # Run ML predictions for each asset
-        for symbol in selected_symbols:
-            asset_name = symbol.replace('-USD', '')
-            prices = price_data[symbol]
-            predictions = predict_returns(prices, 7, 90)
-            
-            if predictions:
-                # Get all model predictions
-                rf_pred = predictions.get('Random Forest', 0)
-                lr_pred = predictions.get('Linear Regression', 0)
-                nn_pred = predictions.get('Neural Network', 0)
-                
-                # Get boosting model prediction (XGBoost or Gradient Boosting)
-                if XGBOOST_AVAILABLE:
-                    boost_pred = predictions.get('XGBoost', 0)
-                    boost_name = "xgboost_7d"
-                else:
-                    boost_pred = predictions.get('Gradient Boosting', 0)
-                    boost_name = "gradient_boosting_7d"
-                
-                # Calculate ensemble prediction from all models
-                all_predictions = [rf_pred, lr_pred, nn_pred, boost_pred]
-                ensemble_pred = np.mean(all_predictions)
-                
-                # Calculate model agreement using standard deviation
-                model_std = np.std(all_predictions)
-                if model_std < 0.01:
-                    agreement = "Very High"
-                elif model_std < 0.02:
-                    agreement = "High"
-                elif model_std < 0.04:
-                    agreement = "Medium"
-                else:
-                    agreement = "Low"
-                
-                ml_results[asset_name] = {
-                    "random_forest_7d": f"{rf_pred:.2%}",
-                    "linear_regression_7d": f"{lr_pred:.2%}",
-                    "neural_network_7d": f"{nn_pred:.2%}",
-                    boost_name: f"{boost_pred:.2%}",
-                    "ensemble_prediction_7d": f"{ensemble_pred:.2%}",
-                    "model_agreement": agreement,
-                    "prediction_std": f"{model_std:.3f}"
-                }
+                # Fallback: If no CV predictions available, indicate this clearly
+                for symbol in selected_symbols:
+                    asset_name = symbol.replace('-USD', '')
+                    ml_results[asset_name] = {
+                        "status": "CV predictions not available",
+                        "note": "Run ML Predictions first to get CV-tuned results",
+                        "cv_tuned": "No"
+                    }
+                        
+        except Exception as e:
+            print(f"Error accessing CV-tuned ML predictions for AI: {e}")
+            # Return empty results if CV predictions fail
+            ml_results = {}
         
         return ml_results
     
@@ -4057,7 +4091,7 @@ elif mode == "AI Investment Advisor":
         return optimization_results
     
     # Generate timeframe-specific market context
-    def generate_timeframe_context(horizon):
+    def generate_timeframe_context(horizon, prediction_days=7):
         """Generate different data context based on investment horizon"""
         context = {}
         
@@ -4125,7 +4159,7 @@ elif mode == "AI Investment Advisor":
                     "sma_20_ratio": f"{(current_price / sma_20 - 1) * 100:.2f}%" if sma_20 > 0 else "N/A",
                     "rsi": f"{rsi:.1f}" if rsi is not None else "N/A",
                     "macd_signal": "Bullish" if macd > 0 else "Bearish",
-                    "momentum_7d": f"{momentum_short:.2f}%" if momentum_short is not None else "N/A",
+                    f"momentum_{min(7, prediction_days)}d": f"{momentum_short:.2f}%" if momentum_short is not None else "N/A",
                     "momentum_30d": f"{momentum_medium:.2f}%" if momentum_medium is not None else "N/A",
                     "data_points": len(asset_prices)
                 }
@@ -4143,13 +4177,13 @@ elif mode == "AI Investment Advisor":
         return rsi
     
     # Generate comprehensive analysis data
-    def generate_analysis_data():
+    def generate_analysis_data(prediction_days):
         analysis_data = {
             "selected_assets": [symbol.replace('-USD', '') for symbol in selected_symbols],
             "time_period": f"{start_date} to {end_date}",
             "investment_horizon": investment_horizon,
             "risk_tolerance": risk_tolerance,
-            "timeframe_context": generate_timeframe_context(investment_horizon),
+            "timeframe_context": generate_timeframe_context(investment_horizon, prediction_days),
             "market_data": {},
             "ml_predictions": {},
             "portfolio_optimization": {},
@@ -4171,7 +4205,7 @@ elif mode == "AI Investment Advisor":
             }
         
         # Get ML predictions
-        analysis_data["ml_predictions"] = run_ml_predictions_for_ai()
+        analysis_data["ml_predictions"] = run_ml_predictions_for_ai(prediction_days)
         
         # Get portfolio optimization results
         analysis_data["portfolio_optimization"] = run_portfolio_optimization_for_ai()
@@ -4238,7 +4272,7 @@ elif mode == "AI Investment Advisor":
     # Generate AI analysis
     if st.button("Get AI Investment Advice", type="primary"):
         with st.spinner("Generating AI analysis..."):
-            analysis_data = generate_analysis_data()
+            analysis_data = generate_analysis_data(prediction_days)
             
             # Create structured prompt for AI
             prompt = f"""
@@ -4257,8 +4291,8 @@ elif mode == "AI Investment Advisor":
             This data is filtered and calculated specifically for {investment_horizon.lower()} analysis:
             {json.dumps(analysis_data['market_data'], indent=2)}
             
-            **Machine Learning Predictions (7-day forecasts using 4 models):**
-            Note: Predictions generated using Random Forest, Linear Regression, Neural Network, and XGBoost/Gradient Boosting models.
+            **Machine Learning Predictions ({prediction_days}-day forecasts using 4 models):**
+            Note: Predictions generated using Random Forest, Linear Regression, Lasso, and XGBoost/Gradient Boosting models.
             Features include: RSI, MACD (line, signal, histogram), moving averages, momentum indicators, and volatility measures.
             
             **IMPORTANT - Weight ML predictions based on investment horizon:**
@@ -4283,7 +4317,7 @@ elif mode == "AI Investment Advisor":
             
             **Horizon-Specific Analysis Instructions:**
             
-            {"SHORT-TERM FOCUS: Prioritize technical indicators from timeframe_context (RSI, MACD signals, momentum_7d/30d), recent volatility patterns, and ML predictions. Make tactical recommendations based on current market momentum and technical analysis. Consider more frequent rebalancing." if "Short-term" in investment_horizon else ""}
+            {"SHORT-TERM FOCUS: Prioritize technical indicators from timeframe_context (RSI, MACD signals, momentum_{min(7, prediction_days)}d/30d), recent volatility patterns, and ML predictions. Make tactical recommendations based on current market momentum and technical analysis. Consider more frequent rebalancing." if "Short-term" in investment_horizon else ""}
             
             {"MEDIUM-TERM FOCUS: Balance technical analysis with fundamental trends. Use timeframe_context period returns and volatility. Weight ML predictions moderately. Consider seasonal patterns and medium-term momentum. Recommend strategic moves with some tactical adjustments." if "Medium-term" in investment_horizon else ""}
             
@@ -4321,7 +4355,7 @@ elif mode == "AI Investment Advisor":
                 "implementation": {{
                     "timeline": "Rebalance over 2-3 trading days",
                     "order_strategy": "Use limit orders, place 1-2% away from market",
-                    "risk_controls": "Set stop losses at 15% below entry for each position"
+                    "risk_controls": "12% below entry for volatile assets (ETH, SOL), 8% for BTC. No single trade > 5% of portfolio value. Weekly monitoring, execute when >5% deviation"
                 }}
             }}
             
@@ -4483,7 +4517,38 @@ elif mode == "AI Investment Advisor":
                                     st.info(f"**Order Strategy:** {impl.get('order_strategy', 'Market orders')}")
                                 
                                 with col2:
-                                    st.warning(f"**Risk Controls:** {impl.get('risk_controls', 'Set appropriate stop losses')}")
+                                    # Format risk controls nicely
+                                    risk_controls = impl.get('risk_controls', 'Set appropriate stop losses')
+                                    if isinstance(risk_controls, dict):
+                                        # Format complex risk controls structure
+                                        formatted_controls = []
+                                        
+                                        # Stop loss levels
+                                        if 'stop_loss_levels' in risk_controls:
+                                            stop_losses = risk_controls['stop_loss_levels']
+                                            if isinstance(stop_losses, dict):
+                                                stop_loss_text = ", ".join([f"{asset}: {level}" for asset, level in stop_losses.items()])
+                                                formatted_controls.append(f"Stop losses: {stop_loss_text}")
+                                            else:
+                                                formatted_controls.append(f"Stop losses: {stop_losses}")
+                                        
+                                        # Position limits
+                                        if 'position_limits' in risk_controls:
+                                            formatted_controls.append(f"Position limits: {risk_controls['position_limits']}")
+                                        
+                                        # Monitoring
+                                        if 'monitoring' in risk_controls:
+                                            formatted_controls.append(f"Monitoring: {risk_controls['monitoring']}")
+                                        
+                                        # Volatility triggers
+                                        if 'volatility_triggers' in risk_controls:
+                                            formatted_controls.append(f"Volatility triggers: {risk_controls['volatility_triggers']}")
+                                        
+                                        risk_controls_text = ". ".join(formatted_controls)
+                                    else:
+                                        risk_controls_text = str(risk_controls)
+                                    
+                                    st.warning(f"**Risk Controls:** {risk_controls_text}")
                                     st.success("**Final Step:** Monitor positions daily and adjust as market conditions change")
                         
                         else:
@@ -4524,14 +4589,14 @@ elif mode == "AI Investment Advisor":
                             'Period Volatility': metrics.get('period_volatility', 'N/A'),
                             'RSI': metrics.get('rsi', 'N/A'),
                             'MACD Signal': metrics.get('macd_signal', 'N/A'),
-                            '7d Momentum': metrics.get('momentum_7d', 'N/A'),
+                            f'{min(7, prediction_days)}d Momentum': metrics.get(f'momentum_{min(7, prediction_days)}d', 'N/A'),
                             '30d Momentum': metrics.get('momentum_30d', 'N/A'),
                             'Data Points': metrics.get('data_points', 'N/A')
                         })
                 
                 if context_df_data:
                     context_df = pd.DataFrame(context_df_data)
-                    st.dataframe(context_df, use_container_width=True)
+                    st.dataframe(context_df, use_container_width=True, hide_index=True)
             
             # Show the data weight guidance
             st.write("**2. AI Guidance Based on Investment Horizon**")
@@ -4547,13 +4612,13 @@ elif mode == "AI Investment Advisor":
             with col1:
                 st.write("**3. Market Performance Data (Full Period)**")
                 market_source_df = pd.DataFrame(analysis_data["market_data"]).T
-                st.dataframe(market_source_df, use_container_width=True)
+                st.dataframe(market_source_df, use_container_width=True, hide_index=True)
             
             with col2:
-                st.write("**4. ML Predictions (7-day forecasts)**")
+                st.write(f"**4. ML Predictions ({prediction_days}-day forecasts)**")
                 if analysis_data["ml_predictions"]:
                     tech_source_df = pd.DataFrame(analysis_data["ml_predictions"]).T
-                    st.dataframe(tech_source_df, use_container_width=True)
+                    st.dataframe(tech_source_df, use_container_width=True, hide_index=True)
                 else:
                     st.write("No ML prediction data available")
             
@@ -4571,7 +4636,7 @@ elif mode == "AI Investment Advisor":
                 
                 if opt_df_data:
                     opt_df = pd.DataFrame(opt_df_data)
-                    st.dataframe(opt_df, use_container_width=True)
+                    st.dataframe(opt_df, use_container_width=True, hide_index=True)
             
             if analysis_data.get("correlation_analysis"):
                 st.write("**6. Correlation Analysis**")
@@ -5127,15 +5192,16 @@ else:  # Portfolio Analysis
         returns_melted = returns.melt(var_name='Asset', value_name='Daily Return')
         returns_melted['Asset'] = returns_melted['Asset'].str.replace('-USD', '')
         
-        fig_box = px.box(
+        fig_violin = px.violin(
             returns_melted, 
             x='Asset', 
             y='Daily Return',
             title="Daily Return Distributions",
             template='plotly_dark' if st.session_state.theme == 'dark' else 'plotly_white'
         )
-        fig_box.update_layout(height=350)
-        st.plotly_chart(fig_box, use_container_width=True, hide_index=True)
+        fig_violin.update_layout(height=350)
+        fig_violin.update_traces(opacity=0.6, points='outliers')
+        st.plotly_chart(fig_violin, use_container_width=True, hide_index=True)
     
     with col2:
         # Enhanced correlation heatmap

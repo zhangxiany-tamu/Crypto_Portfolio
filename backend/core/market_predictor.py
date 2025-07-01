@@ -1,10 +1,18 @@
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, LassoCV
+from sklearn.neural_network import MLPRegressor
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.model_selection import GridSearchCV, TimeSeriesSplit
 from typing import Dict, List, Tuple, Optional
+try:
+    import xgboost as xgb
+    XGBOOST_AVAILABLE = True
+except ImportError:
+    from sklearn.ensemble import GradientBoostingRegressor
+    XGBOOST_AVAILABLE = False
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -133,17 +141,216 @@ class MarketPredictor:
         X_train_scaled = scaler.fit_transform(X_train)
         X_test_scaled = scaler.transform(X_test)
         
-        # Train ensemble of models
-        models = {
-            'rf': RandomForestRegressor(n_estimators=100, random_state=42),
-            'lr': LinearRegression()
-        }
+        # Configure custom time series cross-validation for daily data
+        # Adjust validation window based on prediction horizon and available data
+        # For daily data with typical 7-day predictions and 90-day training windows
         
+        # Estimate if this is daily data based on typical training sizes
+        is_likely_daily_data = len(X_train) < 500  # Less than ~1.5 years suggests daily data
+        
+        if is_likely_daily_data:
+            # Daily data: validation window should match user's prediction period
+            validation_window = prediction_days  # Use exactly what user wants to predict
+            min_train_size = max(120, len(X_train) // 2)  # At least 120 days initial training
+        else:
+            # Weekly data: for weekly data, prediction_days likely represents days, convert to weeks
+            validation_window = max(1, prediction_days // 7)  # Convert days to weeks
+            min_train_size = max(60, len(X_train) // 4)  # At least 60 weeks
+        
+        # Create custom CV splits with fixed validation window sizes
+        def create_custom_cv_splits(data_length, min_train_size, val_window):
+            """Create custom CV splits with fixed validation window sizes"""
+            splits = []
+            
+            # Start with minimum training size
+            current_train_end = min_train_size - 1  # 0-indexed
+            
+            while current_train_end + val_window < data_length:
+                # Training indices: from 0 to current_train_end
+                train_indices = np.arange(0, current_train_end + 1)
+                
+                # Validation indices: next val_window weeks
+                val_start = current_train_end + 1
+                val_end = min(val_start + val_window - 1, data_length - 1)
+                val_indices = np.arange(val_start, val_end + 1)
+                
+                splits.append((train_indices, val_indices))
+                
+                # Move to next fold (advance by validation window)
+                current_train_end += val_window
+                
+                # Limit to maximum 12 folds for computational efficiency
+                if len(splits) >= 12:
+                    break
+            
+            return splits
+        
+        # Validate minimum data requirements and create appropriate CV splits
+        required_min_data = min_train_size + (validation_window * 3)  # Need at least 3 validation periods
+        
+        if len(X_train) < required_min_data:
+            # Insufficient data for proper CV - warn and use minimal validation
+            print(f"Warning: Only {len(X_train)} days of training data available.")
+            print(f"Using simplified validation with {min(3, max(2, len(X_train) // 30))} folds.")
+            
+            n_splits = min(3, max(2, len(X_train) // 30))
+            tscv = TimeSeriesSplit(n_splits=n_splits, test_size=None)
+            cv_splits = list(tscv.split(X_train))
+        else:
+            # Sufficient data for custom CV
+            cv_splits = create_custom_cv_splits(len(X_train), min_train_size, validation_window)
+            n_splits = len(cv_splits)
+            
+            # Cap number of folds based on data type - fewer folds for longer minimum training
+            max_folds = 6 if is_likely_daily_data else 10
+            if n_splits > max_folds:
+                cv_splits = cv_splits[:max_folds]
+                n_splits = max_folds
+        
+        # Train ensemble of models with hyperparameter tuning
+        models = {}
         predictions = {}
         accuracies = {}
         
+        # Random Forest with optimized parameter grid for time series
+        rf_param_grid = {
+            'n_estimators': [50, 100],
+            'max_depth': [5, 10],
+            'min_samples_split': [5, 10],
+            'min_samples_leaf': [2, 5],
+            'max_features': ['sqrt']
+        }
+        
+        
+        rf_grid = GridSearchCV(
+            RandomForestRegressor(random_state=42, n_jobs=-1),
+            rf_param_grid,
+            cv=cv_splits,
+            scoring='neg_mean_squared_error',
+            n_jobs=-1,
+            verbose=0
+        )
+        
+        rf_grid.fit(X_train_scaled, y_train)
+        models['rf'] = rf_grid.best_estimator_
+        
+        # Linear Regression (no hyperparameters to tune)
+        models['lr'] = LinearRegression()
+        models['lr'].fit(X_train_scaled, y_train)
+        
+        # Lasso with EXTREME sparsity-encouraging alpha selection for crypto noise
+        lasso_cv = LassoCV(
+            alphas=np.logspace(-2, 2, 50),  # Reduced range: 0.01 to 100, fewer choices
+            cv=cv_splits,
+            random_state=42,
+            max_iter=3000,  # Fewer iterations for faster execution
+            tol=1e-4,  # Slightly relaxed tolerance
+            selection='random'  # Random coordinate selection for better sparsity
+        )
+        lasso_cv.fit(X_train_scaled, y_train)
+        models['lasso'] = lasso_cv
+        
+        # Neural Network with EXTREME sparsity-encouraging regularization for crypto noise
+        # Split into two grids due to solver compatibility issues
+        nn_param_grid_adam = {
+            'hidden_layer_sizes': [(5,), (10,), (8, 5)],  # Smaller networks
+            'alpha': [1.0, 10.0, 50.0],  # EXTREME L2 regularization
+            'learning_rate_init': [0.001, 0.003],  # Lower rates
+            'solver': ['adam'],
+            'activation': ['relu'],
+            'early_stopping': [True],
+            'max_iter': [150]  # Fixed iterations
+        }
+        
+        nn_param_grid_lbfgs = {
+            'hidden_layer_sizes': [(5,), (10,)],  # Smaller networks
+            'alpha': [1.0, 10.0],  # EXTREME L2 regularization
+            'solver': ['lbfgs'],
+            'activation': ['relu'],
+            'early_stopping': [False],  # lbfgs doesn't support early_stopping
+            'max_iter': [150]  # Fixed iterations
+        }
+        
+        
+        # Test both solver types and pick the best
+        best_nn_score = float('-inf')
+        best_nn_model = None
+        
+        for param_grid in [nn_param_grid_adam, nn_param_grid_lbfgs]:
+            nn_grid = GridSearchCV(
+                MLPRegressor(random_state=42, max_iter=1000, tol=1e-4),
+                param_grid,
+                cv=cv_splits,
+                scoring='neg_mean_squared_error',
+                n_jobs=-1,
+                verbose=0
+            )
+            nn_grid.fit(X_train_scaled, y_train)
+            
+            if nn_grid.best_score_ > best_nn_score:
+                best_nn_score = nn_grid.best_score_
+                best_nn_model = nn_grid.best_estimator_
+        
+        models['nn'] = best_nn_model
+        
+        # XGBoost with EXTREME sparsity-encouraging regularization for crypto noise
+        if XGBOOST_AVAILABLE:
+            xgb_param_grid = {
+                'n_estimators': [25, 50],  # Fewer trees
+                'max_depth': [1, 2],  # Ultra-shallow trees for maximum sparsity
+                'learning_rate': [0.01, 0.05],  # Lower rates
+                'subsample': [0.5, 0.7],  # EXTREME subsampling for sparsity
+                'colsample_bytree': [0.4, 0.6],  # EXTREME feature subsampling
+                'reg_alpha': [5.0, 50.0],  # EXTREME L1 for sparsity
+                'reg_lambda': [10.0, 100.0],  # EXTREME L2 regularization
+                'min_child_weight': [10],  # Much higher minimum weights
+                'gamma': [0.5]  # Minimum loss reduction for splits
+            }
+            
+            
+            xgb_grid = GridSearchCV(
+                xgb.XGBRegressor(
+                    random_state=42, 
+                    verbosity=0,
+                    objective='reg:squarederror'
+                ),
+                xgb_param_grid,
+                cv=cv_splits,
+                scoring='neg_mean_squared_error',
+                n_jobs=-1,
+                verbose=0
+            )
+            
+            xgb_grid.fit(X_train_scaled, y_train)
+            models['xgb'] = xgb_grid.best_estimator_
+        else:
+            # Fallback to Gradient Boosting with EXTREME sparsity-encouraging regularization for crypto noise
+            gb_param_grid = {
+                'n_estimators': [25, 50],  # Fewer trees
+                'max_depth': [1, 2],  # Ultra-shallow trees for maximum sparsity
+                'learning_rate': [0.01, 0.05],  # Lower learning rates
+                'subsample': [0.5, 0.7],  # EXTREME subsampling for sparsity
+                'min_samples_split': [20],  # Higher minimum samples for splits
+                'min_samples_leaf': [10],  # Higher minimum samples in leaves
+                'max_features': [0.4, 'sqrt']  # EXTREME feature subsampling
+            }
+            
+            
+            gb_grid = GridSearchCV(
+                GradientBoostingRegressor(random_state=42),
+                gb_param_grid,
+                cv=cv_splits,
+                scoring='neg_mean_squared_error',
+                n_jobs=-1,
+                verbose=0
+            )
+            
+            gb_grid.fit(X_train_scaled, y_train)
+            models['gb'] = gb_grid.best_estimator_
+        
+        # Make predictions and calculate accuracies
         for name, model in models.items():
-            model.fit(X_train_scaled, y_train)
+            # All models are already fitted (RF via grid search, LR and Lasso directly)
             pred = model.predict(X_test_scaled)
             accuracy = r2_score(y_test, pred)
             
