@@ -212,10 +212,10 @@ class MarketPredictor:
         predictions = {}
         accuracies = {}
         
-        # Random Forest with expanded parameter grid for time series
+        # Random Forest with optimized parameter grid for time series
         rf_param_grid = {
-            'n_estimators': [50, 75, 100, 150],
-            'max_depth': [8, 10, 12],
+            'n_estimators': [50, 100],
+            'max_depth': [8, 12],
             'min_samples_split': [5, 10],
             'min_samples_leaf': [2, 5],
             'max_features': ['sqrt']
@@ -277,11 +277,11 @@ class MarketPredictor:
         # XGBoost with EXTREME sparsity-encouraging regularization for crypto noise
         if XGBOOST_AVAILABLE:
             xgb_param_grid = {
-                'n_estimators': [30, 50, 75],  # 3 options
+                'n_estimators': [30, 75],  # 2 options
                 'max_depth': [2, 3],  # 2 options
                 'learning_rate': [0.01, 0.05],  # 2 options
-                'subsample': [0.6, 0.8],  # 2 options
-                'colsample_bytree': [0.5, 0.7],  # 2 options
+                'subsample': [0.7],  # 1 option - Fixed subsampling
+                'colsample_bytree': [0.6],  # 1 option - Fixed feature subsampling
                 'reg_alpha': [10.0, 30.0],  # 2 options - Strong L1 regularization
                 'reg_lambda': [100.0],  # 1 option - Fixed strong L2 regularization
                 'min_child_weight': [10],  # Fixed higher minimum weights
@@ -307,12 +307,12 @@ class MarketPredictor:
         else:
             # Fallback to Gradient Boosting with EXTREME sparsity-encouraging regularization for crypto noise
             gb_param_grid = {
-                'n_estimators': [30, 50, 75],  # 3 options
+                'n_estimators': [30, 75],  # 2 options
                 'max_depth': [2, 3],  # 2 options
                 'learning_rate': [0.01, 0.05],  # 2 options
-                'subsample': [0.6, 0.8],  # 2 options
+                'subsample': [0.7],  # 1 option - Fixed subsampling
                 'min_samples_split': [20],  # 1 option - Fixed higher minimum samples
-                'min_samples_leaf': [8, 12],  # 2 options
+                'min_samples_leaf': [10],  # 1 option - Fixed minimum samples
                 'max_features': ['sqrt']  # 1 option - Fixed feature subsampling
             }
             

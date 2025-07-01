@@ -1544,7 +1544,7 @@ if mode == "Market Insights":
         
         with tab1:
             # Price distribution analysis
-            col1, col2 = st.columns([1, 2])
+            col1, col2 = st.columns([1, 1])
             
             with col1:
                 # Calculate statistics
@@ -1688,7 +1688,7 @@ if mode == "Market Insights":
         
         with tab2:
             # Returns distribution analysis
-            col1, col2 = st.columns([1, 2])
+            col1, col2 = st.columns([1, 1])
             
             with col1:
                 # Calculate statistics
@@ -3001,10 +3001,10 @@ elif mode == "ML Predictions":
         # Train models with cross-validation
         models = {}
         
-        # Random Forest with CV (expanded grid)
+        # Random Forest with CV (optimized grid)
         rf_param_grid = {
-            'n_estimators': [50, 75, 100, 150],
-            'max_depth': [8, 10, 12],
+            'n_estimators': [50, 100],
+            'max_depth': [8, 12],
             'min_samples_split': [5, 10],
             'min_samples_leaf': [2, 5],
             'max_features': ['sqrt']
@@ -3042,11 +3042,11 @@ elif mode == "ML Predictions":
         # XGBoost/Gradient Boosting with CV (moderately expanded grid)
         if XGBOOST_AVAILABLE:
             xgb_param_grid = {
-                'n_estimators': [30, 50, 75],
+                'n_estimators': [30, 75],
                 'max_depth': [2, 3],
                 'learning_rate': [0.01, 0.05],
-                'subsample': [0.6, 0.8],
-                'colsample_bytree': [0.5, 0.7],
+                'subsample': [0.7],
+                'colsample_bytree': [0.6],
                 'reg_alpha': [10.0, 30.0],
                 'reg_lambda': [100.0]
             }
@@ -3063,12 +3063,12 @@ elif mode == "ML Predictions":
             models['XGBoost'] = xgb_grid.best_estimator_
         else:
             gb_param_grid = {
-                'n_estimators': [30, 50, 75],
+                'n_estimators': [30, 75],
                 'max_depth': [2, 3],
                 'learning_rate': [0.01, 0.05],
-                'subsample': [0.6, 0.8],
+                'subsample': [0.7],
                 'min_samples_split': [20],
-                'min_samples_leaf': [8, 12],
+                'min_samples_leaf': [10],
                 'max_features': ['sqrt']
             }
             
