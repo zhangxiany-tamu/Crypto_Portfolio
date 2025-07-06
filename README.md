@@ -4,19 +4,18 @@ A web application for cryptocurrency portfolio optimization and analysis with ma
 
 ## Features
 
-- **Market Insights**: Price performance analysis, technical indicators, and detailed coin analytics
-- **Portfolio Analysis**: Comprehensive backtesting with customizable weights and rebalancing strategies
+- **Market Insights**: Price performance analysis, technical indicators, and coin analytics
+- **Portfolio Analysis**: Backtesting with customizable weights and rebalancing strategies
 - **Portfolio Optimization**: Maximum Sharpe Ratio, Minimum Variance, and Risk Parity algorithms
-- **Machine Learning Predictions**: Random Forest and Linear Regression models with portfolio forecasts
+- **Machine Learning Predictions**: Multiple ML models including Random Forest, Linear Regression, Lasso, and Gradient Boosting with ensemble predictions
 - **AI Investment Advisor**: Integration with OpenAI GPT-4, Anthropic Claude, and Google Gemini
-- **Professional Interface**: Clean, emoji-free design focused on analytical insights
-- **Real-time Data**: Enhanced data loading with local database and API fallback
+- **Real-time Data**: Data loading with local database and API fallback
 
 ## Quick Start
 
 ### Live Demo
 
-**[Try the live application](https://zhangxianyang-crypto-portfolio.share.connect.posit.cloud/)**
+**[Live application](https://zhangxianyang-crypto-portfolio.share.connect.posit.cloud/)**
 
 ### Local Installation
 
@@ -45,7 +44,7 @@ Open your browser to `http://localhost:8501`
 
 ### 2. Portfolio Analysis & Backtest
 - Define portfolio weights (automatically uses optimized weights if available)
-- Run comprehensive backtesting with various rebalancing strategies
+- Run backtesting with various rebalancing strategies
 - Analyze performance metrics, drawdowns, and risk-adjusted returns
 - Compare against benchmark portfolios
 
@@ -57,19 +56,20 @@ Open your browser to `http://localhost:8501`
 
 ### 4. Machine Learning Predictions
 - Select prediction horizon (1-30 days) for price forecasting
-- Compare Random Forest and Linear Regression model performance
+- Compare multiple ML models: Random Forest, Linear Regression, Lasso, XGBoost/Gradient Boosting
+- Ensemble predictions combining all models for improved accuracy
 - View portfolio-level predictions using current or optimized weights
 - Analyze model confidence and prediction accuracy
 
 ### 5. AI Investment Advisor
 - Input your current portfolio allocation
-- Get personalized investment recommendations from multiple AI models
-- Receive detailed analysis of market conditions and portfolio positioning
+- Get investment recommendations from multiple AI models
+- Receive analysis of market conditions and portfolio positioning
 - Configure API keys for OpenAI GPT-4, Anthropic Claude, or Google Gemini
 
 ## Supported Assets
 
-**60+ cryptocurrencies** with 5+ years of historical data, including:
+60+ cryptocurrencies with 5+ years of historical data, including:
 
 **Major Assets:** BTC, ETH, XRP, BNB, SOL, DOGE, ADA, MATIC, DOT, UNI
 
@@ -77,7 +77,7 @@ Open your browser to `http://localhost:8501`
 
 **Layer 1/2 & Infrastructure:** AVAX, NEAR, ATOM, ICP, APT, SUI, FTM, ALGO
 
-**Additional Coverage:** Extended database includes emerging and established cryptocurrencies
+**Additional Coverage:** Database includes emerging and established cryptocurrencies
 
 ## AI Integration
 
@@ -93,8 +93,8 @@ Crypto_Portfolio/
 ├── frontend/app.py              # Main Streamlit application
 ├── portfolio_optimizer.py       # Optimization algorithms  
 ├── robust_data_fetcher.py       # Data fetching utilities
-├── enhanced_crypto_loader.py    # Enhanced data loading with local database
-├── data/crypto_extended.db      # Extended cryptocurrency database
+├── enhanced_crypto_loader.py    # Data loading with local database
+├── data/crypto_extended.db      # Cryptocurrency database
 ├── requirements.txt             # Dependencies
 └── README.md                   # This file
 ```
