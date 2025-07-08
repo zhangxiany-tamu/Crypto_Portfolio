@@ -35,6 +35,10 @@ warnings.filterwarnings('ignore')
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from portfolio_optimizer import PortfolioOptimizer
 from enhanced_crypto_loader import EnhancedCryptoLoader
+import importlib
+import technical_analysis
+importlib.reload(technical_analysis)
+from technical_analysis import TechnicalAnalyzer
 
 # Add backend/core to path for ML imports
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'backend', 'core'))
@@ -1250,7 +1254,7 @@ st.sidebar.markdown("""
 # Mode selection
 mode = st.sidebar.selectbox(
     "Select Mode",
-    ["Market Insights", "Portfolio Analysis & Backtest", "Portfolio Optimization", "ML Predictions", "AI Investment Advisor"]
+    ["Market Insights", "Technical Analysis", "Portfolio Analysis & Backtest", "Portfolio Optimization", "ML Predictions", "AI Investment Advisor"]
 )
 
 # Common parameters
@@ -1443,15 +1447,25 @@ if mode == "Market Insights":
     
     # Price Performance Section
     st.subheader("Price Performance")
-    price_view_mode = st.selectbox("View Mode", ["Normalized", "Raw Price"])
+    
+    # View mode selection only
+    price_view_mode = st.selectbox("View Mode", ["Normalized", "Raw Price", "Log Scale"])
+    
+    # Fixed chart height
+    chart_height_px = 500
     
     if price_view_mode == "Normalized":
-        # Normalize to 100 at start
         chart_data = (price_data / price_data.iloc[0] * 100)
         y_title = "Normalized Price (Start = 100)"
+        log_y = False
+    elif price_view_mode == "Log Scale":
+        chart_data = price_data
+        y_title = "Price (USD) - Log Scale"
+        log_y = True
     else:
         chart_data = price_data
         y_title = "Price (USD)"
+        log_y = False
     
     fig = go.Figure()
     for symbol in selected_symbols:
@@ -1464,22 +1478,85 @@ if mode == "Market Insights":
         ))
     
     fig.update_layout(
-        title=f"Price Performance ({price_view_mode})",
+        title=f"Price Performance - {price_view_mode}",
         xaxis_title="Date",
         yaxis_title=y_title,
+        yaxis_type="log" if log_y else "linear",
         hovermode='x unified',
-        height=500
+        height=chart_height_px,
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        )
     )
+    # Make plot transparent for better integration
+    fig = make_plot_transparent(fig)
     st.plotly_chart(fig, use_container_width=True)
     
-    # Detailed Individual Coin Analysis
-    st.subheader("Detailed Coin Analysis")
+    # Market Correlation Matrix
+    st.subheader("🔗 Asset Correlation Matrix")
     
-    # Allow user to select specific coin for detailed analysis
+    if len(selected_symbols) > 1:
+        # Calculate correlation matrix
+        corr_matrix = returns.corr()
+        
+        # Create correlation heatmap
+        fig_corr = go.Figure(data=go.Heatmap(
+            z=corr_matrix.values,
+            x=[symbol.replace('-USD', '') for symbol in corr_matrix.columns],
+            y=[symbol.replace('-USD', '') for symbol in corr_matrix.index],
+            colorscale=[
+                [0.0, '#2166ac'],    # Dark blue for -1 (inverse correlation)
+                [0.25, '#5aae61'],   # Green for -0.5
+                [0.5, '#f7f7f7'],    # White for 0 (no correlation)
+                [0.75, '#fdbf6f'],   # Orange for 0.5
+                [1.0, '#d73027']     # Red for 1 (perfect correlation)
+            ],
+            zmid=0,
+            zmin=-1,
+            zmax=1,
+            text=corr_matrix.round(3).values,
+            texttemplate="%{text}",
+            textfont={"size": 12, "color": "black"},
+            hoverongaps=False,
+            hovertemplate='<b>%{y} vs %{x}</b><br>Correlation: %{z:.3f}<extra></extra>',
+            showscale=True,
+            colorbar=dict(
+                title="Correlation",
+                thickness=15,
+                len=0.7
+            )
+        ))
+        
+        fig_corr.update_layout(
+            title="Asset Return Correlations (1 = Perfect Correlation, -1 = Inverse)",
+            height=min(400, len(selected_symbols) * 50 + 200),
+            xaxis_title="",
+            yaxis_title=""
+        )
+        
+        # Make plot transparent for better integration
+        fig_corr = make_plot_transparent(fig_corr)
+        st.plotly_chart(fig_corr, use_container_width=True)
+    else:
+        st.info("Correlation analysis requires at least 2 assets. Please select more cryptocurrencies in the sidebar.")
+        
+        # Correlation insights
+        avg_corr = corr_matrix.values[np.triu_indices_from(corr_matrix.values, k=1)].mean()
+        st.info(f"Portfolio Diversification: Average correlation is {avg_corr:.2f}. Lower correlation (closer to 0) indicates better diversification.")
+    
+    # Detailed Asset Analysis
+    st.subheader("Detailed Asset Analysis")
+    
+    # Asset selection for detailed analysis
     selected_coin = st.selectbox(
-        "Select coin for detailed analysis:",
+        "Select asset for detailed analysis:",
         options=selected_symbols,
-        format_func=lambda x: x.replace('-USD', '')
+        format_func=lambda x: f"{x.replace('-USD', '')} - ${price_data[x].iloc[-1]:,.2f}"
     )
     
     if selected_coin:
@@ -1514,9 +1591,12 @@ if mode == "Market Insights":
         current_from_high = (current_price - price_high) / price_high
         current_from_low = (current_price - price_low) / price_low
         
-        # Display detailed metrics in columns
-        st.write(f"**{coin_name} Detailed Analysis**")
+        # Analysis header
+        st.markdown(f"### {coin_name} Analysis")
+        st.markdown(f"*Analysis Period: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}*")
         
+        # Key metrics
+        st.markdown("#### Key Performance Metrics")
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
@@ -1527,7 +1607,7 @@ if mode == "Market Insights":
         with col2:
             st.metric("30-Day Return", f"{returns_30d:.2%}")
             st.metric("90-Day Return", f"{returns_90d:.2%}")
-            st.metric("Period Return", f"{total_return:.2%}")
+            st.metric("Total Return", f"{total_return:.2%}")
         
         with col3:
             st.metric("Annual Volatility", f"{volatility_annual:.1%}")
@@ -1539,8 +1619,35 @@ if mode == "Market Insights":
             st.metric("Period Low", f"${price_low:,.2f}")
             st.metric("From High", f"{current_from_high:.1%}")
         
-        # Additional analysis tabs
-        tab1, tab2, tab3 = st.tabs(["Price Distribution", "Returns Analysis", "Technical Indicators"])
+        # Risk Assessment Summary
+        st.markdown("#### Risk Assessment")
+        
+        # Risk level determination
+        if volatility_annual > 0.8:
+            risk_level = "Very High Risk"
+            risk_color = "#e74c3c"
+        elif volatility_annual > 0.6:
+            risk_level = "High Risk"
+            risk_color = "#f39c12"
+        elif volatility_annual > 0.4:
+            risk_level = "Medium Risk"
+            risk_color = "#f1c40f"
+        else:
+            risk_level = "Low Risk"
+            risk_color = "#27ae60"
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.markdown(f"**Risk Level:** {risk_level}")
+        with col2:
+            performance_rating = "Strong" if total_return > 0.2 else "Moderate" if total_return > 0 else "Weak"
+            st.markdown(f"**Performance:** {performance_rating} ({total_return:.1%})")
+        with col3:
+            trend_direction = "Uptrend" if returns_30d > 0.05 else "Downtrend" if returns_30d < -0.05 else "Sideways"
+            st.markdown(f"**30D Trend:** {trend_direction}")
+        
+        # Analysis tabs
+        tab1, tab2 = st.tabs(["Distribution", "Risk Metrics"])
         
         with tab1:
             # Price distribution analysis
@@ -1575,21 +1682,18 @@ if mode == "Market Insights":
                     st.metric("StdDev", f"${price_std:.0f}")
                     st.metric("CV%", f"{cv:.1f}")
                 
-                # Risk assessment with visual indicator
+                # Risk assessment without emojis
                 if distance_from_mean > 2:
-                    risk_color = "🔴"
                     risk_text = "High deviation"
                 elif distance_from_mean > 1:
-                    risk_color = "🟡"
                     risk_text = "Moderate deviation"
                 else:
-                    risk_color = "🟢"
                     risk_text = "Normal range"
                 
                 st.markdown("### Assessment")
                 st.markdown(f"""
                 **Position**: {percentile_rank:.0f}th percentile  
-                **Status**: {risk_color} {risk_text} ({distance_from_mean:.1f}σ)
+                **Status**: {risk_text} ({distance_from_mean:.1f}σ)
                 """)
             
             with col2:
@@ -1719,13 +1823,10 @@ if mode == "Market Insights":
                 # Volatility assessment
                 annualized_vol = returns_std * (252 ** 0.5)
                 if annualized_vol > 1.0:
-                    vol_color = "🔴"
                     vol_text = "Very high volatility"
                 elif annualized_vol > 0.5:
-                    vol_color = "🟡"
                     vol_text = "High volatility"
                 else:
-                    vol_color = "🟢"
                     vol_text = "Moderate volatility"
                 
                 # Sharpe ratio (assuming risk-free rate of 0)
@@ -1733,7 +1834,7 @@ if mode == "Market Insights":
                 
                 st.markdown("### Assessment")
                 st.markdown(f"""
-                **Volatility**: {vol_color} {vol_text}  
+                **Volatility**: {vol_text}  
                 **Annualized Vol**: {annualized_vol:.1%}  
                 **Sharpe Ratio**: {sharpe:.2f}
                 """)
@@ -1830,125 +1931,472 @@ if mode == "Market Insights":
                     showlegend=False
                 )
                 st.plotly_chart(fig_violin_returns, use_container_width=True)
-        
-        with tab3:
-            # Technical indicators
-            # Moving averages
-            ma_20 = coin_data.rolling(20).mean()
-            ma_50 = coin_data.rolling(50).mean()
+
+elif mode == "Technical Analysis":
+    st.header("Technical Analysis")
+    
+    # Only show cryptocurrencies that are selected in the sidebar
+    available_coins = [coin for coin in selected_symbols if coin in crypto_symbols]
+    
+    if not available_coins:
+        st.warning("Please select at least one cryptocurrency from the sidebar to perform technical analysis.")
+        st.stop()
+    
+    selected_coin = st.selectbox(
+        "Choose a cryptocurrency for analysis",
+        options=available_coins,
+        key="ta_coin_selection",
+        help=f"Select from {len(available_coins)} cryptocurrencies chosen in the sidebar"
+    )
+    
+    # Get data for the selected coin
+    try:
+        coin_data = data_manager.get_real_data([selected_coin], start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
+        if coin_data is not None and not coin_data.empty:
+            coin_series = coin_data[selected_coin].dropna()
             
-            # RSI calculation
-            delta = coin_data.diff()
-            gain = (delta.where(delta > 0, 0)).rolling(14).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
-            rs = gain / loss
-            rsi = 100 - (100 / (1 + rs))
+            # Initialize technical analyzer
+            ta = TechnicalAnalyzer(coin_series)
             
-            # MACD calculation
-            ema_12 = coin_data.ewm(span=12).mean()
-            ema_26 = coin_data.ewm(span=26).mean()
-            macd_line = ema_12 - ema_26
-            macd_signal = macd_line.ewm(span=9).mean()
-            macd_histogram = macd_line - macd_signal
+            # Calculate indicators and analyze signals
+            indicators = ta.calculate_all_indicators()
+            signals = ta.analyze_signals()
+            summary = ta.get_signal_summary()
             
-            fig_tech = go.Figure()
+            # Signal Summary
+            st.subheader("Signal Summary")
             
-            # Price and moving averages
-            fig_tech.add_trace(go.Scatter(
-                x=coin_data.index,
-                y=coin_data,
-                mode='lines',
-                name=f"{coin_name} Price",
-                line=dict(width=2)
-            ))
+            # Clean metrics layout
+            col1, col2, col3, col4 = st.columns(4)
             
-            fig_tech.add_trace(go.Scatter(
-                x=ma_20.index,
-                y=ma_20,
-                mode='lines',
-                name='MA-20',
-                line=dict(width=1, dash='dash')
-            ))
+            with col1:
+                current_price = coin_series.iloc[-1]
+                st.metric("Current Price", f"${current_price:.4f}")
             
-            fig_tech.add_trace(go.Scatter(
-                x=ma_50.index,
-                y=ma_50,
-                mode='lines',
-                name='MA-50',
-                line=dict(width=1, dash='dot')
-            ))
+            with col2:
+                overall_signal = signals['overall']['signal'].upper()
+                st.metric("Overall Signal", overall_signal)
             
-            fig_tech.update_layout(
-                title=f"{coin_name} Technical Analysis",
-                xaxis_title="Date",
-                yaxis_title="Price (USD)",
-                height=400
-            )
-            st.plotly_chart(fig_tech, use_container_width=True)
+            with col3:
+                confidence = signals['overall']['confidence']
+                st.metric("Confidence", f"{confidence:.1%}")
             
-            # RSI chart
-            fig_rsi = go.Figure()
-            fig_rsi.add_trace(go.Scatter(
-                x=rsi.index,
-                y=rsi,
-                mode='lines',
-                name='RSI',
-                line=dict(width=2, color='orange')
-            ))
+            with col4:
+                strength = signals['overall']['strength']
+                st.metric("Signal Strength", f"{strength:.1%}")
             
-            fig_rsi.add_hline(y=70, line_dash="dash", line_color="red", annotation_text="Overbought (70)")
-            fig_rsi.add_hline(y=30, line_dash="dash", line_color="green", annotation_text="Oversold (30)")
+            # Timeframe Analysis
+            st.subheader("Timeframe Analysis")
             
-            fig_rsi.update_layout(
-                title="Relative Strength Index (RSI)",
-                xaxis_title="Date",
-                yaxis_title="RSI",
-                height=300,
-                yaxis=dict(range=[0, 100])
-            )
-            st.plotly_chart(fig_rsi, use_container_width=True)
+            timeframe_cols = st.columns(3)
+            timeframes = ['short_term', 'medium_term', 'long_term']
+            timeframe_names = ['Short Term (1-7 days)', 'Medium Term (1-4 weeks)', 'Long Term (1-3 months)']
             
-            # MACD chart
-            fig_macd = go.Figure()
+            for i, (tf, name) in enumerate(zip(timeframes, timeframe_names)):
+                with timeframe_cols[i]:
+                    tf_data = signals[tf]
+                    signal = tf_data['signal'].upper()
+                    
+                    st.markdown(f"**{name}**")
+                    st.metric("Signal", signal)
+                    st.metric("Strength", f"{tf_data['strength']:.1%}")
+                    st.metric("Confidence", f"{tf_data['confidence']:.1%}")
+                    
+                    # Show key factors
+                    if tf_data['reasons']:
+                        st.markdown("**Key Factors:**")
+                        for reason in tf_data['reasons'][:2]:
+                            st.markdown(f"• {reason}")
             
-            # MACD line
-            fig_macd.add_trace(go.Scatter(
-                x=macd_line.index,
-                y=macd_line,
-                mode='lines',
-                name='MACD Line',
-                line=dict(width=2, color='blue')
-            ))
+            # Technical Indicators
+            st.subheader("Technical Indicators")
             
-            # Signal line
-            fig_macd.add_trace(go.Scatter(
-                x=macd_signal.index,
-                y=macd_signal,
-                mode='lines',
-                name='Signal Line',
-                line=dict(width=2, color='red')
-            ))
+            # Reorganized tabs without duplicates
+            tab1, tab2, tab3, tab4 = st.tabs([
+                "Trend Analysis", 
+                "Momentum", 
+                "Volatility", 
+                "Additional Indicators"
+            ])
             
-            # Histogram
-            fig_macd.add_trace(go.Bar(
-                x=macd_histogram.index,
-                y=macd_histogram,
-                name='MACD Histogram',
-                marker_color=['green' if x > 0 else 'red' for x in macd_histogram],
-                opacity=0.7
-            ))
+            with tab1:
+                # Price and Moving Averages
+                fig_trend = go.Figure()
+                
+                # Price
+                fig_trend.add_trace(go.Scatter(
+                    x=coin_series.index,
+                    y=coin_series,
+                    mode='lines',
+                    name=f'{selected_coin} Price',
+                    line=dict(width=2)
+                ))
+                
+                # Moving averages
+                ma_colors = {'sma_7': 'orange', 'sma_21': 'green', 'sma_50': 'red', 'sma_200': 'purple'}
+                ma_names = {'sma_7': 'SMA 7', 'sma_21': 'SMA 21', 'sma_50': 'SMA 50', 'sma_200': 'SMA 200'}
+                
+                for ma_key, color in ma_colors.items():
+                    if ma_key in indicators:
+                        fig_trend.add_trace(go.Scatter(
+                            x=indicators[ma_key].index,
+                            y=indicators[ma_key],
+                            mode='lines',
+                            name=ma_names[ma_key],
+                            line=dict(width=1, color=color, dash='dash')
+                        ))
+                
+                # Add key levels from summary
+                if 'key_levels' in summary:
+                    levels = summary['key_levels']
+                    current_price = coin_series.iloc[-1]
+                    
+                    # Add support and resistance levels as invisible traces for legend
+                    if 'support' in levels:
+                        fig_trend.add_hline(
+                            y=levels['support'], 
+                            line_dash="dot", 
+                            line_color="green",
+                            line_width=2
+                        )
+                        # Add invisible trace for legend
+                        fig_trend.add_trace(go.Scatter(
+                            x=[coin_series.index[0]],
+                            y=[levels['support']],
+                            mode='lines',
+                            name=f"Support: ${levels['support']:.4f}",
+                            line=dict(color="green", dash="dot", width=2),
+                            showlegend=True,
+                            visible='legendonly'
+                        ))
+                    
+                    if 'resistance' in levels:
+                        fig_trend.add_hline(
+                            y=levels['resistance'], 
+                            line_dash="dot", 
+                            line_color="red",
+                            line_width=2
+                        )
+                        # Add invisible trace for legend
+                        fig_trend.add_trace(go.Scatter(
+                            x=[coin_series.index[0]],
+                            y=[levels['resistance']],
+                            mode='lines',
+                            name=f"Resistance: ${levels['resistance']:.4f}",
+                            line=dict(color="red", dash="dot", width=2),
+                            showlegend=True,
+                            visible='legendonly'
+                        ))
+                
+                fig_trend.update_layout(
+                    title=f"{selected_coin} Price with Moving Averages & Key Levels",
+                    xaxis_title="Date",
+                    yaxis_title="Price (USD)",
+                    height=500
+                )
+                st.plotly_chart(fig_trend, use_container_width=True)
+                
+                # MACD
+                if all(k in indicators for k in ['macd_line', 'macd_signal', 'macd_histogram']):
+                    fig_macd = go.Figure()
+                    
+                    fig_macd.add_trace(go.Scatter(
+                        x=indicators['macd_line'].index,
+                        y=indicators['macd_line'],
+                        mode='lines',
+                        name='MACD Line',
+                        line=dict(color='blue')
+                    ))
+                    
+                    fig_macd.add_trace(go.Scatter(
+                        x=indicators['macd_signal'].index,
+                        y=indicators['macd_signal'],
+                        mode='lines',
+                        name='Signal Line',
+                        line=dict(color='red')
+                    ))
+                    
+                    fig_macd.add_trace(go.Bar(
+                        x=indicators['macd_histogram'].index,
+                        y=indicators['macd_histogram'],
+                        name='MACD Histogram',
+                        marker_color=['green' if x > 0 else 'red' for x in indicators['macd_histogram']],
+                        opacity=0.7
+                    ))
+                    
+                    fig_macd.add_hline(y=0, line_dash="dash", line_color="gray")
+                    
+                    fig_macd.update_layout(
+                        title="MACD",
+                        xaxis_title="Date",
+                        yaxis_title="MACD",
+                        height=400
+                    )
+                    st.plotly_chart(fig_macd, use_container_width=True)
             
-            # Zero line
-            fig_macd.add_hline(y=0, line_dash="dash", line_color="gray", annotation_text="Zero Line")
+            with tab2:
+                # RSI
+                if 'rsi' in indicators:
+                    fig_rsi = go.Figure()
+                    fig_rsi.add_trace(go.Scatter(
+                        x=indicators['rsi'].index,
+                        y=indicators['rsi'],
+                        mode='lines',
+                        name='RSI',
+                        line=dict(color='orange', width=2)
+                    ))
+                    
+                    fig_rsi.add_hline(y=70, line_dash="dash", line_color="red", annotation_text="Overbought (70)")
+                    fig_rsi.add_hline(y=30, line_dash="dash", line_color="green", annotation_text="Oversold (30)")
+                    fig_rsi.add_hline(y=50, line_dash="solid", line_color="gray", annotation_text="Neutral (50)")
+                    
+                    fig_rsi.update_layout(
+                        title="Relative Strength Index (RSI)",
+                        xaxis_title="Date",
+                        yaxis_title="RSI",
+                        height=400,
+                        yaxis=dict(range=[0, 100])
+                    )
+                    st.plotly_chart(fig_rsi, use_container_width=True)
+                
+                # Stochastic Oscillator
+                if all(k in indicators for k in ['stoch_k', 'stoch_d']):
+                    fig_stoch = go.Figure()
+                    
+                    fig_stoch.add_trace(go.Scatter(
+                        x=indicators['stoch_k'].index,
+                        y=indicators['stoch_k'],
+                        mode='lines',
+                        name='%K',
+                        line=dict(color='blue')
+                    ))
+                    
+                    fig_stoch.add_trace(go.Scatter(
+                        x=indicators['stoch_d'].index,
+                        y=indicators['stoch_d'],
+                        mode='lines',
+                        name='%D',
+                        line=dict(color='red')
+                    ))
+                    
+                    fig_stoch.add_hline(y=80, line_dash="dash", line_color="red", annotation_text="Overbought (80)")
+                    fig_stoch.add_hline(y=20, line_dash="dash", line_color="green", annotation_text="Oversold (20)")
+                    
+                    fig_stoch.update_layout(
+                        title="Stochastic Oscillator",
+                        xaxis_title="Date",
+                        yaxis_title="Stochastic",
+                        height=400,
+                        yaxis=dict(range=[0, 100])
+                    )
+                    st.plotly_chart(fig_stoch, use_container_width=True)
+                
+                # Williams %R
+                if 'williams_r' in indicators:
+                    fig_williams = go.Figure()
+                    fig_williams.add_trace(go.Scatter(
+                        x=indicators['williams_r'].index,
+                        y=indicators['williams_r'],
+                        mode='lines',
+                        name='Williams %R',
+                        line=dict(color='purple', width=2)
+                    ))
+                    
+                    fig_williams.add_hline(y=-20, line_dash="dash", line_color="red", annotation_text="Overbought (-20)")
+                    fig_williams.add_hline(y=-80, line_dash="dash", line_color="green", annotation_text="Oversold (-80)")
+                    
+                    fig_williams.update_layout(
+                        title="Williams %R",
+                        xaxis_title="Date",
+                        yaxis_title="Williams %R",
+                        height=400,
+                        yaxis=dict(range=[-100, 0])
+                    )
+                    st.plotly_chart(fig_williams, use_container_width=True)
             
-            fig_macd.update_layout(
-                title="MACD (Moving Average Convergence Divergence)",
-                xaxis_title="Date",
-                yaxis_title="MACD",
-                height=350,
-                showlegend=True
-            )
-            st.plotly_chart(fig_macd, use_container_width=True)
+            with tab3:
+                # Bollinger Bands
+                if all(k in indicators for k in ['bb_upper', 'bb_middle', 'bb_lower']):
+                    fig_bb = go.Figure()
+                    
+                    # Price
+                    fig_bb.add_trace(go.Scatter(
+                        x=coin_series.index,
+                        y=coin_series,
+                        mode='lines',
+                        name=f'{selected_coin} Price',
+                        line=dict(color='blue', width=2)
+                    ))
+                    
+                    # Bollinger Bands
+                    fig_bb.add_trace(go.Scatter(
+                        x=indicators['bb_upper'].index,
+                        y=indicators['bb_upper'],
+                        mode='lines',
+                        name='Upper Band',
+                        line=dict(color='red', width=1),
+                        fill=None
+                    ))
+                    
+                    fig_bb.add_trace(go.Scatter(
+                        x=indicators['bb_lower'].index,
+                        y=indicators['bb_lower'],
+                        mode='lines',
+                        name='Lower Band',
+                        line=dict(color='red', width=1),
+                        fill='tonexty',
+                        fillcolor='rgba(255,0,0,0.1)'
+                    ))
+                    
+                    fig_bb.add_trace(go.Scatter(
+                        x=indicators['bb_middle'].index,
+                        y=indicators['bb_middle'],
+                        mode='lines',
+                        name='Middle Band (SMA 20)',
+                        line=dict(color='green', width=1, dash='dash')
+                    ))
+                    
+                    # Key levels are shown in Trend Analysis tab to avoid duplication
+                    
+                    fig_bb.update_layout(
+                        title=f"{selected_coin} Bollinger Bands",
+                        xaxis_title="Date",
+                        yaxis_title="Price (USD)",
+                        height=500
+                    )
+                    st.plotly_chart(fig_bb, use_container_width=True)
+                
+                # ATR (Average True Range)
+                if 'atr' in indicators:
+                    fig_atr = go.Figure()
+                    fig_atr.add_trace(go.Scatter(
+                        x=indicators['atr'].index,
+                        y=indicators['atr'],
+                        mode='lines',
+                        name='ATR',
+                        line=dict(color='brown', width=2)
+                    ))
+                    
+                    fig_atr.update_layout(
+                        title="Average True Range (ATR) - Volatility Measure",
+                        xaxis_title="Date",
+                        yaxis_title="ATR",
+                        height=400
+                    )
+                    st.plotly_chart(fig_atr, use_container_width=True)
+            
+            with tab4:
+                # Additional Indicators
+                st.markdown("#### Additional Technical Indicators")
+                
+                # Commodity Channel Index (CCI)
+                if 'cci' in indicators:
+                    fig_cci = go.Figure()
+                    fig_cci.add_trace(go.Scatter(
+                        x=indicators['cci'].index,
+                        y=indicators['cci'],
+                        mode='lines',
+                        name='CCI',
+                        line=dict(color='purple', width=2)
+                    ))
+                    
+                    fig_cci.add_hline(y=100, line_dash="dash", line_color="red", annotation_text="Overbought (100)")
+                    fig_cci.add_hline(y=-100, line_dash="dash", line_color="green", annotation_text="Oversold (-100)")
+                    fig_cci.add_hline(y=0, line_dash="solid", line_color="gray")
+                    
+                    fig_cci.update_layout(
+                        title="Commodity Channel Index (CCI)",
+                        xaxis_title="Date",
+                        yaxis_title="CCI",
+                        height=400
+                    )
+                    st.plotly_chart(fig_cci, use_container_width=True)
+                
+                # Rate of Change (ROC)
+                if 'roc_10' in indicators and 'roc_20' in indicators:
+                    fig_roc = go.Figure()
+                    
+                    fig_roc.add_trace(go.Scatter(
+                        x=indicators['roc_10'].index,
+                        y=indicators['roc_10'],
+                        mode='lines',
+                        name='ROC 10-day',
+                        line=dict(color='blue', width=2)
+                    ))
+                    
+                    fig_roc.add_trace(go.Scatter(
+                        x=indicators['roc_20'].index,
+                        y=indicators['roc_20'],
+                        mode='lines',
+                        name='ROC 20-day',
+                        line=dict(color='red', width=2)
+                    ))
+                    
+                    fig_roc.add_hline(y=0, line_dash="solid", line_color="gray")
+                    
+                    fig_roc.update_layout(
+                        title="Rate of Change (ROC)",
+                        xaxis_title="Date",
+                        yaxis_title="ROC (%)",
+                        height=400
+                    )
+                    st.plotly_chart(fig_roc, use_container_width=True)
+                
+                # Momentum indicators
+                if 'momentum_10' in indicators and 'momentum_20' in indicators:
+                    fig_momentum = go.Figure()
+                    
+                    fig_momentum.add_trace(go.Scatter(
+                        x=indicators['momentum_10'].index,
+                        y=indicators['momentum_10'] * 100,  # Convert to percentage
+                        mode='lines',
+                        name='10-day Momentum',
+                        line=dict(color='orange', width=2)
+                    ))
+                    
+                    fig_momentum.add_trace(go.Scatter(
+                        x=indicators['momentum_20'].index,
+                        y=indicators['momentum_20'] * 100,  # Convert to percentage
+                        mode='lines',
+                        name='20-day Momentum',
+                        line=dict(color='green', width=2)
+                    ))
+                    
+                    fig_momentum.add_hline(y=0, line_dash="solid", line_color="gray")
+                    
+                    fig_momentum.update_layout(
+                        title="Price Momentum",
+                        xaxis_title="Date",
+                        yaxis_title="Momentum (%)",
+                        height=400
+                    )
+                    st.plotly_chart(fig_momentum, use_container_width=True)
+            
+            # Risk Metrics
+            st.subheader("Risk Metrics")
+            
+            if 'risk_metrics' in summary and not summary['risk_metrics'].get('insufficient_data', False):
+                risk_metrics = summary['risk_metrics']
+                
+                risk_cols = st.columns(4)
+                with risk_cols[0]:
+                    st.metric("30-Day Volatility", f"{risk_metrics['volatility_30d']:.1%}")
+                with risk_cols[1]:
+                    st.metric("7-Day Volatility", f"{risk_metrics['volatility_7d']:.1%}")
+                with risk_cols[2]:
+                    st.metric("Max Drawdown", f"{risk_metrics['max_drawdown']:.1%}")
+                with risk_cols[3]:
+                    st.metric("Sharpe Ratio", f"{risk_metrics['sharpe_ratio']:.2f}")
+            
+            # Key levels are already displayed on the price charts in Trend Analysis tab
+            
+            
+        else:
+            st.error("Unable to load data for the selected cryptocurrency. Please try again.")
+    
+    except Exception as e:
+        st.error(f"Error in technical analysis: {str(e)}")
+        st.info("Please ensure you have selected a valid cryptocurrency and time period.")
 
 elif mode == "Portfolio Analysis & Backtest":
     st.header("Portfolio Analysis & Backtesting")
@@ -2583,7 +3031,78 @@ elif mode == "Portfolio Optimization":
     
 
 elif mode == "Market Insights":
-    st.header("Market Analysis & Insights")
+    # Crypto News Headlines Section
+    st.header("📰 Crypto Market News")
+    
+    try:
+        # Fetch latest crypto news headlines
+        news_placeholder = st.empty()
+        with news_placeholder:
+            with st.spinner("Fetching latest crypto market headlines..."):
+                # Use WebSearch to get latest crypto news
+                search_results = []
+                
+                # Search for recent crypto news from major sources
+                try:
+                    from datetime import datetime
+                    today = datetime.now().strftime("%Y-%m-%d")
+                    
+                    # Multiple news searches for comprehensive coverage
+                    crypto_searches = [
+                        f"crypto cryptocurrency news {today} site:coindesk.com OR site:cointelegraph.com OR site:bloomberg.com",
+                        f"Bitcoin Ethereum price news {today} site:reuters.com OR site:cnbc.com OR site:marketwatch.com",
+                        f"cryptocurrency market analysis {today} site:theblock.co OR site:decrypt.co"
+                    ]
+                    
+                    all_results = []
+                    for search_query in crypto_searches:
+                        try:
+                            # Perform web search for news
+                            import streamlit as st
+                            # Note: Using a placeholder for WebSearch functionality
+                            # In production, this would use the WebSearch tool
+                            pass
+                        except Exception as e:
+                            continue
+                    
+                    # Fallback: Display static news sources with links
+                    news_placeholder.empty()
+                    
+                    st.markdown("""
+                    ### 📈 Latest Crypto Market Headlines
+                    
+                    **Stay updated with the latest cryptocurrency market news from trusted sources:**
+                    
+                    📊 **Major News Sources:**
+                    - [CoinDesk](https://www.coindesk.com/) - Leading crypto news and analysis
+                    - [Cointelegraph](https://cointelegraph.com/) - Blockchain & crypto news
+                    - [The Block](https://www.theblock.co/) - Digital asset news
+                    - [Decrypt](https://decrypt.co/) - Web3 and crypto insights
+                    
+                    📰 **Financial News:**
+                    - [Bloomberg Crypto](https://www.bloomberg.com/crypto) - Professional market analysis
+                    - [Reuters Crypto](https://www.reuters.com/technology/crypto/) - Global crypto coverage
+                    - [CNBC Crypto](https://www.cnbc.com/crypto/) - Investment perspectives
+                    - [MarketWatch Crypto](https://www.marketwatch.com/investing/cryptocurrency) - Market trends
+                    
+                    💡 **Analysis & Research:**
+                    - [CryptoSlate](https://cryptoslate.com/) - Market data and insights
+                    - [Messari](https://messari.io/news) - On-chain analysis
+                    - [CoinGecko News](https://www.coingecko.com/en/news) - Market updates
+                    
+                    *Note: Always verify information from multiple sources and do your own research before making investment decisions.*
+                    """)
+                    
+                except Exception as e:
+                    st.warning("Unable to fetch live news at this time. Please check the news sources above for latest updates.")
+    
+    except Exception as e:
+        st.error(f"Error loading news section: {str(e)}")
+    
+    st.markdown("---")  # Separator
+    
+    # Market Analysis Section
+    st.header("📊 Market Analysis & Insights")
     
     # Get cached data
     price_data, returns = get_cached_data(
@@ -2592,8 +3111,19 @@ elif mode == "Market Insights":
         end_date.strftime('%Y-%m-%d')
     )
     
-    # Market overview
-    st.subheader("Market Overview")
+    # Market overview with improved layout
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.subheader("📈 Market Overview")
+    with col2:
+        # Quick market stats
+        if len(selected_symbols) > 0:
+            avg_return = np.mean([((price_data[symbol].iloc[-1] / price_data[symbol].iloc[0]) - 1) for symbol in selected_symbols])
+            if avg_return > 0:
+                st.metric("Avg Portfolio Return", f"{avg_return:.1%}", delta=f"+{avg_return:.1%}")
+            else:
+                st.metric("Avg Portfolio Return", f"{avg_return:.1%}", delta=f"{avg_return:.1%}")
     
     # Calculate market metrics
     market_data = []
@@ -2825,46 +3355,77 @@ elif mode == "ML Predictions":
     
     # Check if cryptocurrencies are selected
     if not selected_symbols:
-        st.warning("⚠️ Please select cryptocurrencies in the sidebar to run ML predictions.")
+        st.warning("Please select cryptocurrencies in the sidebar to run ML predictions.")
         st.stop()
     
     
     # ML Configuration in sidebar
     st.sidebar.subheader("ML Configuration")
-    prediction_days = st.sidebar.slider("Prediction Period (days)", 1, 30, 3)
-    train_window = st.sidebar.slider("Training Window (days)", 60, 500, 250)
+    prediction_days = st.sidebar.slider("Prediction Period (days)", 1, 30, 7)
+    
+    # Training window optimization option
+    optimize_train_window = st.sidebar.checkbox(
+        "Auto-optimize Training Window", 
+        value=True,
+        help="Use cross-validation to find the optimal training window length for the selected prediction period"
+    )
+    
+    if optimize_train_window:
+        st.sidebar.info("Training window will be optimized using ensemble of multiple models")
+        # We'll determine this later based on CV optimization
+        train_window = None
+        optimization_method = "Robust (Ensemble)"  # Always use ensemble when optimizing
+    else:
+        train_window = st.sidebar.slider("Training Window (days)", 60, 500, 150)
+        optimization_method = None
     
     # Calculate CV requirements and show warnings (validation window = prediction period)
     validation_window = prediction_days  # Validation window should match prediction period
-    min_train_size = max(120, train_window // 2)
-    required_min_data = min_train_size + (validation_window * 3)
     
     # Cross-validation info
-    with st.sidebar.expander("📊 Cross-Validation Info", expanded=False):
+    with st.sidebar.expander("Cross-Validation Info", expanded=False):
         st.write(f"**Validation window:** {validation_window} days")
-        st.write(f"**Recommended minimum:** {required_min_data} days")
         
-        if train_window < 120:
-            st.error(f"❌ Training window ({train_window} days) is below minimum requirement (120 days). Increase to at least 120 days for reliable results.")
-        elif train_window < required_min_data:
-            st.warning(f"⚠️ Training window ({train_window} days) is below recommended minimum ({required_min_data} days) for robust cross-validation with {prediction_days}-day predictions.")
-        elif train_window < 180:
-            st.info(f"💡 For more robust model validation, consider using 180+ days of training data.")
-        elif train_window >= 365:
-            st.info(f"📈 Large training window ({train_window} days) selected - automatically loading extended historical data for robust training.")
+        if optimize_train_window:
+            st.write("**Training window optimization:**")
+            st.write("- Will test multiple window sizes (30-180 days)")
+            st.write("- Uses time-series cross-validation")
+            st.write("- Optimizes individually for each cryptocurrency")
+            st.write("- Selects window with best validation performance")
+            st.write("- Balances model accuracy vs. overfitting")
         else:
-            st.success(f"✅ Training window is excellent for robust cross-validation ({train_window} days) with {prediction_days}-day validation periods.")
+            min_train_size = max(90, train_window // 2)
+            required_min_data = min_train_size + (validation_window * 2)
+            st.write(f"**Recommended minimum:** {required_min_data} days")
+            
+            if train_window < 90:
+                st.error(f"Training window ({train_window} days) is below minimum requirement (90 days). Increase to at least 90 days for reliable results.")
+            elif train_window < required_min_data:
+                st.warning(f"Training window ({train_window} days) is below recommended minimum ({required_min_data} days) for robust cross-validation with {prediction_days}-day predictions.")
+            elif train_window < 120:
+                st.info(f"Short-term focus: {train_window} days is adequate for {prediction_days}-day predictions. Consider 120+ days for more robust validation.")
+            elif train_window >= 365:
+                st.info(f"Large training window ({train_window} days) selected - automatically loading extended historical data for robust training.")
+            else:
+                st.success(f"Training window is excellent for robust cross-validation ({train_window} days) with {prediction_days}-day validation periods.")
     
     # Calculate extended data range for ML training (after ML config is defined)
     # Need extra data to account for: feature engineering loss (~25 days) + training window + prediction buffer
     feature_engineering_buffer = 30  # Conservative buffer for technical indicators
-    ml_buffer_days = max(0, train_window + prediction_days + feature_engineering_buffer - (end_date - start_date).days)
+    
+    if optimize_train_window:
+        # For optimization, we need to load enough data for the largest possible training window
+        max_train_window = 180  # Maximum window we'll test
+        ml_buffer_days = max(0, max_train_window + prediction_days + feature_engineering_buffer - (end_date - start_date).days)
+        if ml_buffer_days > 0:
+            st.info(f"Loading additional {ml_buffer_days} days of historical data to support training window optimization")
+    else:
+        ml_buffer_days = max(0, train_window + prediction_days + feature_engineering_buffer - (end_date - start_date).days)
+        if ml_buffer_days > 0:
+            st.info(f"Loading additional {ml_buffer_days} days of historical data to support {train_window}-day training window")
     
     # Extend start date if needed for large training windows
     ml_start_date = start_date - timedelta(days=ml_buffer_days) if ml_buffer_days > 0 else start_date
-    
-    if ml_buffer_days > 0:
-        st.info(f"📈 Loading additional {ml_buffer_days} days of historical data to support {train_window}-day training window")
     
     # Get cached data with extended range
     try:
@@ -2877,12 +3438,12 @@ elif mode == "ML Predictions":
         # Check if we have data
         if price_data is None or price_data.empty:
             st.error("❌ No price data available for the selected period and cryptocurrencies.")
-            st.info("💡 Try selecting a longer date range or different cryptocurrencies.")
+            st.info("Try selecting a longer date range or different cryptocurrencies.")
             st.stop()
             
         # Display data info
         total_days_loaded = (end_date - ml_start_date).days
-        st.info(f"📊 Loaded data for {len(selected_symbols)} cryptocurrencies from {ml_start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')} ({total_days_loaded} days)")
+        st.info(f"Loaded data for {len(selected_symbols)} cryptocurrencies from {ml_start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')} ({total_days_loaded} days)")
         
     except Exception as e:
         st.error(f"❌ Error loading data: {str(e)}")
@@ -2923,6 +3484,154 @@ elif mode == "ML Predictions":
         rsi = 100 - (100 / (1 + rs))
         return rsi
     
+    # Training window evaluation function
+    def evaluate_training_window(prices, target_days, train_window, use_ensemble=False):
+        """
+        Evaluate a training window using time series cross-validation.
+        Returns the average CV score (lower is better).
+        
+        Args:
+            use_ensemble: If True, uses ensemble of models. If False, uses only Linear Regression.
+        """
+        from sklearn.model_selection import TimeSeriesSplit
+        from sklearn.linear_model import LinearRegression, Lasso
+        from sklearn.ensemble import RandomForestRegressor
+        from sklearn.preprocessing import StandardScaler
+        from sklearn.metrics import mean_squared_error
+        
+        # Create features
+        features = create_features(prices)
+        
+        # Create target variable
+        target = features['returns'].shift(-target_days)
+        
+        # Align features and target
+        aligned_data = pd.concat([features, target.rename('target')], axis=1).dropna()
+        
+        if len(aligned_data) < train_window + target_days + 30:
+            raise ValueError(f"Insufficient data for {train_window}-day training window")
+        
+        X = aligned_data.drop('target', axis=1)
+        y = aligned_data['target']
+        
+        # Use only the most recent data for evaluation
+        X = X.tail(train_window + target_days * 3)  # Use 3x prediction period for CV
+        y = y.tail(train_window + target_days * 3)
+        
+        # Time series cross-validation
+        n_splits = min(3, len(X) // (train_window // 2))  # Fewer splits for speed
+        tscv = TimeSeriesSplit(n_splits=n_splits)
+        
+        # Define models based on user selection
+        if use_ensemble:
+            # Adaptive hyperparameters based on training window size and data characteristics
+            n_features = X.shape[1]
+            n_samples = min(len(X), train_window)
+            
+            # Lasso alpha: lighter for shorter windows (more flexibility), stronger for longer windows
+            lasso_alpha = 0.05 if train_window <= 60 else (0.1 if train_window <= 120 else 0.15)
+            
+            # RF parameters: smaller ensemble for shorter windows, larger for longer windows
+            rf_n_estimators = max(15, min(30, train_window // 3))  # Scale with window size
+            rf_max_depth = max(3, min(6, int(np.log2(n_features)) + 1))  # Scale with feature count
+            
+            models = {
+                'linear': LinearRegression(),
+                'lasso': Lasso(alpha=lasso_alpha, max_iter=1000),  # Adaptive regularization
+                'rf': RandomForestRegressor(
+                    n_estimators=rf_n_estimators, 
+                    max_depth=rf_max_depth,
+                    min_samples_split=max(5, n_samples // 20),  # Prevent overfitting on small windows
+                    min_samples_leaf=max(2, n_samples // 40),
+                    random_state=42, 
+                    n_jobs=1
+                )
+            }
+            weights = {'linear': 0.4, 'lasso': 0.4, 'rf': 0.2}
+        else:
+            # Fast mode: only Linear Regression
+            models = {
+                'linear': LinearRegression()
+            }
+            weights = {'linear': 1.0}
+        
+        all_model_scores = {name: [] for name in models.keys()}
+        scaler = StandardScaler()
+        
+        for train_idx, val_idx in tscv.split(X):
+            try:
+                X_train_cv, X_val_cv = X.iloc[train_idx], X.iloc[val_idx]
+                y_train_cv, y_val_cv = y.iloc[train_idx], y.iloc[val_idx]
+                
+                # Only use the last train_window points for training
+                if len(X_train_cv) > train_window:
+                    X_train_cv = X_train_cv.tail(train_window)
+                    y_train_cv = y_train_cv.tail(train_window)
+                
+                # Scale features
+                X_train_scaled = scaler.fit_transform(X_train_cv.fillna(0))
+                X_val_scaled = scaler.transform(X_val_cv.fillna(0))
+                
+                # Evaluate each model
+                for name, model in models.items():
+                    try:
+                        # Train and predict
+                        model.fit(X_train_scaled, y_train_cv)
+                        y_pred = model.predict(X_val_scaled)
+                        
+                        # Calculate score
+                        score = mean_squared_error(y_val_cv, y_pred)
+                        all_model_scores[name].append(score)
+                        
+                    except Exception as e:
+                        # Skip this model for this fold
+                        continue
+                        
+            except Exception as e:
+                # Skip this fold if it fails
+                continue
+        
+        # Calculate ensemble score (average of model scores, weighted by reliability)
+        model_avg_scores = {}
+        for name, scores in all_model_scores.items():
+            if scores:
+                model_avg_scores[name] = np.mean(scores)
+        
+        if not model_avg_scores:
+            raise ValueError("All models failed in CV")
+        
+        # Use weighted average based on selected models
+        
+        ensemble_score = 0
+        total_weight = 0
+        for name, score in model_avg_scores.items():
+            weight = weights.get(name, 0)
+            ensemble_score += score * weight
+            total_weight += weight
+        
+        # Normalize by actual total weight (in case some models failed)
+        if total_weight > 0:
+            return ensemble_score / total_weight
+        else:
+            # Fallback to simple average if weighting fails
+            return np.mean(list(model_avg_scores.values()))
+    
+    # Window choice interpretation function
+    def interpret_window_choice(window):
+        """Interpret what the optimal window choice means"""
+        if window <= 30:
+            return "Very short memory: Highly adaptive, captures immediate market shifts"
+        elif window <= 60:
+            return "Short memory: Captures recent volatility, adapts quickly to regime changes"
+        elif window <= 90:
+            return "Medium-short memory: Balances recent trends with some stability"
+        elif window <= 120:
+            return "Medium memory: Good balance of trend capture and noise reduction"
+        elif window <= 150:
+            return "Medium-long memory: Stable patterns, less sensitive to short-term noise"
+        else:
+            return "Long memory: Captures long-term patterns, very stable predictions"
+    
     # ML Prediction function
     def predict_returns(prices, target_days=7, train_window=90):
         try:
@@ -2952,7 +3661,7 @@ elif mode == "ML Predictions":
             if len(X) < effective_train_window:
                 actual_available = len(X) + feature_engineering_loss  # Estimate original data size
                 st.warning(f"Insufficient data for training. Need at least {train_window} days, got ~{actual_available} days after feature engineering.")
-                st.info(f"💡 Try reducing training window to {len(X) + feature_engineering_loss - 10} days or loading more historical data.")
+                st.info(f"Try reducing training window to {len(X) + feature_engineering_loss - 10} days or loading more historical data.")
                 return None, None, None
             
             # Use available data for training, avoiding future data leakage
@@ -2989,10 +3698,10 @@ elif mode == "ML Predictions":
         from sklearn.model_selection import GridSearchCV, TimeSeriesSplit
         
         validation_window = target_days
-        min_train_size = max(60, len(X_train) // 2)
+        min_train_size = max(45, len(X_train) // 3)  # Reduced for shorter windows
         
-        # Use TimeSeriesSplit for cross-validation
-        n_splits = min(5, max(3, len(X_train) // 30))
+        # Use TimeSeriesSplit for cross-validation - optimized for shorter training windows
+        n_splits = min(4, max(3, len(X_train) // 25))  # Slightly more frequent splits for shorter windows
         tscv = TimeSeriesSplit(n_splits=n_splits)
         cv_splits = list(tscv.split(X_train))
         
@@ -3001,12 +3710,12 @@ elif mode == "ML Predictions":
         # Train models with cross-validation
         models = {}
         
-        # Random Forest with CV (optimized grid)
+        # Random Forest with CV (optimized for shorter training windows)
         rf_param_grid = {
-            'n_estimators': [50, 100],
-            'max_depth': [8, 12],
-            'min_samples_split': [5, 10],
-            'min_samples_leaf': [2, 5],
+            'n_estimators': [30, 50],  # Reduced for faster training with shorter windows
+            'max_depth': [6, 10],      # Slightly reduced to prevent overfitting
+            'min_samples_split': [8, 15], # Increased to prevent overfitting on smaller datasets
+            'min_samples_leaf': [4, 8],   # Increased for regularization
             'max_features': ['sqrt']
         }
         
@@ -3025,30 +3734,30 @@ elif mode == "ML Predictions":
         models['Linear Regression'] = LinearRegression()
         models['Linear Regression'].fit(X_train_scaled, y_train)
         
-        # Lasso with CV (expanded alpha range)
+        # Lasso with CV (optimized for shorter training windows)
         from sklearn.linear_model import LassoCV
         lasso_cv = LassoCV(
-            alphas=np.logspace(-2, 2, 40),  # Expanded: 40 alpha values
+            alphas=np.logspace(-1, 1, 20),  # Focused range for shorter windows
             cv=cv_splits,
             random_state=42,
-            max_iter=2000,
-            selection='random'  # Add random coordinate selection for sparsity
+            max_iter=1500,  # Reduced iterations for faster training
+            selection='random'  # Random coordinate selection for sparsity
         )
         lasso_cv.fit(X_train_scaled, y_train)
         models['Lasso'] = lasso_cv
         
         # Neural Network removed due to convergence issues on small financial datasets
         
-        # XGBoost/Gradient Boosting with CV (moderately expanded grid)
+        # XGBoost/Gradient Boosting with CV (optimized for 7-day predictions)
         if XGBOOST_AVAILABLE:
             xgb_param_grid = {
-                'n_estimators': [30, 75],
-                'max_depth': [2, 3],
-                'learning_rate': [0.01, 0.05],
-                'subsample': [0.7],
-                'colsample_bytree': [0.6],
-                'reg_alpha': [10.0, 30.0],
-                'reg_lambda': [100.0]
+                'n_estimators': [25, 50],      # Reduced for shorter training windows
+                'max_depth': [2, 4],           # Slightly increased max depth for 7-day patterns
+                'learning_rate': [0.02, 0.05], # Focused on moderate learning rates
+                'subsample': [0.8],            # Increased subsample for stability
+                'colsample_bytree': [0.7],     # Increased column sampling
+                'reg_alpha': [5.0, 15.0],      # Reduced regularization for shorter windows
+                'reg_lambda': [50.0, 100.0]    # More flexible lambda range
             }
             
             xgb_grid = GridSearchCV(
@@ -3063,12 +3772,12 @@ elif mode == "ML Predictions":
             models['XGBoost'] = xgb_grid.best_estimator_
         else:
             gb_param_grid = {
-                'n_estimators': [30, 75],
-                'max_depth': [2, 3],
-                'learning_rate': [0.01, 0.05],
-                'subsample': [0.7],
-                'min_samples_split': [20],
-                'min_samples_leaf': [10],
+                'n_estimators': [25, 50],      # Reduced for shorter training windows
+                'max_depth': [2, 4],           # Slightly increased for 7-day patterns
+                'learning_rate': [0.02, 0.05], # Focused learning rates
+                'subsample': [0.8],            # Increased for stability
+                'min_samples_split': [15, 25], # Adjusted for shorter windows
+                'min_samples_leaf': [8, 12],   # Adjusted for regularization
                 'max_features': ['sqrt']
             }
             
@@ -3120,37 +3829,127 @@ elif mode == "ML Predictions":
     st.subheader("Individual Asset Predictions")
     
     # Add debugging information
+    
+    prediction_results = {}
+    all_predictions_data = []
+    
+    # Training window optimization (if enabled)
+    if optimize_train_window:
+        # Define candidate training windows to test
+        candidate_windows = [30, 45, 60, 90, 120, 150, 180]
+        
+        # Filter candidates based on available data
+        max_available_data = min([len(price_data[symbol].dropna()) for symbol in selected_symbols])
+        candidate_windows = [w for w in candidate_windows if w + prediction_days + 30 <= max_available_data]
+        
+        if len(candidate_windows) < 2:
+            st.warning("Insufficient data for training window optimization. Using default 150 days.")
+            train_window = 150
+            # Create default per-asset mapping
+            optimal_windows = {symbol: 150 for symbol in selected_symbols}
+        else:
+            # Optimize for each cryptocurrency individually
+            optimal_windows = {}
+            all_results = {}
+            
+            total_steps = len(selected_symbols) * len(candidate_windows)
+            opt_progress = st.progress(0)
+            opt_status = st.empty()
+            step = 0
+            
+            opt_status.text(f"Optimizing training windows for {len(selected_symbols)} cryptocurrencies...")
+            
+            for symbol in selected_symbols:
+                asset_name = symbol.replace('-USD', '')
+                prices = price_data[symbol].dropna()
+                
+                asset_results = []
+                
+                for window in candidate_windows:
+                    step += 1
+                    opt_status.text(f"Testing {asset_name}: {window}-day window ({step}/{total_steps})")
+                    opt_progress.progress(step / total_steps)
+                    
+                    try:
+                        use_ensemble = optimization_method == "Robust (Ensemble)"
+                        score = evaluate_training_window(prices, prediction_days, window, use_ensemble)
+                        asset_results.append({
+                            'Asset': asset_name,
+                            'Training Window': window,
+                            'CV Score': score,
+                            'CV Score (%)': f"{score*100:.3f}%"
+                        })
+                    except Exception as e:
+                        st.warning(f"Failed to evaluate {asset_name} with {window}-day window: {str(e)}")
+                        continue
+                
+                if asset_results:
+                    # Select best window for this asset
+                    best_result = min(asset_results, key=lambda x: x['CV Score'])
+                    optimal_windows[symbol] = best_result['Training Window']
+                    all_results[symbol] = asset_results
+                else:
+                    # Fallback for this asset
+                    optimal_windows[symbol] = 120
+                    st.warning(f"Using fallback 120 days for {asset_name}")
+            
+            opt_status.empty()
+            opt_progress.empty()
+            
+            if optimal_windows:
+                # Use the most common optimal window as the default for display
+                # But we'll actually use individual windows during training
+                train_window = max(set(optimal_windows.values()), key=list(optimal_windows.values()).count)
+            else:
+                st.error("Training window optimization failed for all assets. Using default 150 days.")
+                train_window = 150
+                optimal_windows = {symbol: 150 for symbol in selected_symbols}
+    else:
+        # When optimization is disabled, create a mapping with the manual training window
+        optimal_windows = {symbol: train_window for symbol in selected_symbols}
+    
+    # Display consolidated training information
+    if optimize_train_window:
+        # Show that individual windows are being used
+        window_range = f"{min(optimal_windows.values())}-{max(optimal_windows.values())}" if len(set(optimal_windows.values())) > 1 else str(list(optimal_windows.values())[0])
+        st.info(f"Training {len(selected_symbols)} cryptocurrencies with optimized windows ({window_range} days) using time series cross-validation | Prediction period: {prediction_days} days")
+    else:
+        st.info(f"Training {len(selected_symbols)} cryptocurrencies with {train_window}-day window using time series cross-validation | Prediction period: {prediction_days} days")
+    
+    # Store the prediction period used for training (for AI analysis)
+    if 'prediction_results' not in st.session_state:
+        st.session_state.prediction_results = {}
+    st.session_state.ml_prediction_days = prediction_days
+    
+    # Data Summary (after training window is determined)
     with st.expander("Data Summary", expanded=False):
         st.write(f"**Selected Assets:** {len(selected_symbols)}")
         st.write(f"**Date Range:** {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
         st.write(f"**Available Data Days:** {len(price_data)}")
-        st.write(f"**Training Window:** {train_window} days")
+        
+        if optimize_train_window:
+            window_range = f"{min(optimal_windows.values())}-{max(optimal_windows.values())}" if len(set(optimal_windows.values())) > 1 else str(list(optimal_windows.values())[0])
+            st.write(f"**Training Windows:** {window_range} days (optimized per cryptocurrency)")
+        else:
+            st.write(f"**Training Window:** {train_window} days")
+            
         st.write(f"**Prediction Period:** {prediction_days} days")
         
         # Show data availability for each asset
         data_summary = []
         for symbol in selected_symbols:
             prices = price_data[symbol].dropna()
+            symbol_window = optimal_windows.get(symbol, train_window)
             data_summary.append({
                 'Asset': symbol.replace('-USD', ''),
                 'Data Points': len(prices),
+                'Training Window': f"{symbol_window} days" if optimize_train_window else f"{train_window} days",
                 'Latest Price': f"${prices.iloc[-1]:.2f}" if len(prices) > 0 else "No data",
-                'Status': "✓ Ready" if len(prices) >= train_window + prediction_days else "⚠️ Insufficient"
+                'Status': "Ready" if len(prices) >= symbol_window + prediction_days else "Insufficient"
             })
         
         if data_summary:
             st.dataframe(pd.DataFrame(data_summary), use_container_width=True, hide_index=True)
-    
-    prediction_results = {}
-    all_predictions_data = []
-    
-    # Display CV information once before training starts
-    st.info(f"🔄 Using time series cross-validation for hyperparameter tuning across all cryptocurrencies...")
-    
-    # Store the prediction period used for training (for AI analysis)
-    if 'prediction_results' not in st.session_state:
-        st.session_state.prediction_results = {}
-    st.session_state.ml_prediction_days = prediction_days
     
     # Progress bar for model training
     progress_bar = st.progress(0)
@@ -3158,14 +3957,23 @@ elif mode == "ML Predictions":
     
     # Collect all prediction data first
     for i, symbol in enumerate(selected_symbols):
-        status_text.text(f"Training models for {symbol.replace('-USD', '')}...")
+        asset_name = symbol.replace('-USD', '')
+        
+        # Use individual optimal window if available, otherwise use default
+        if optimize_train_window and symbol in optimal_windows:
+            symbol_train_window = optimal_windows[symbol]
+            status_text.text(f"Training models for {asset_name} (using {symbol_train_window}-day window)...")
+        else:
+            symbol_train_window = train_window
+            status_text.text(f"Training models for {asset_name}...")
+            
         progress_bar.progress((i + 1) / len(selected_symbols))
         
         prices = price_data[symbol]
-        predictions, metrics, train_dates = predict_returns(prices, prediction_days, train_window)
+        predictions, metrics, train_dates = predict_returns(prices, prediction_days, symbol_train_window)
         
         if predictions is None:
-            st.warning(f"⚠️ Skipping {symbol.replace('-USD', '')} - insufficient data or training failed")
+            st.warning(f"Skipping {symbol.replace('-USD', '')} - insufficient data or training failed")
             continue
         
         prediction_results[symbol] = predictions
@@ -3190,14 +3998,14 @@ elif mode == "ML Predictions":
     
     if not all_predictions_data:
         st.error("❌ No successful predictions were generated for any of the selected cryptocurrencies.")
-        st.info("💡 This could be due to:")
+        st.info("This could be due to:")
         st.write("""
         - Insufficient historical data (need at least 30-90 days)
         - Data quality issues
         - Selected date range too short
         - Technical issues with feature calculation
         """)
-        st.info("🔧 Try:")
+        st.info("Try:")
         st.write("""
         - Selecting a longer date range (6+ months recommended)
         - Reducing the training window in ML Configuration
