@@ -1212,19 +1212,40 @@ st.markdown(apply_theme_css(st.session_state.theme), unsafe_allow_html=True)
 
 # Function to fetch live crypto news with WebSearch integration
 @st.cache_data(ttl=1800)  # Cache for 30 minutes
-def fetch_crypto_news_dynamic(max_headlines=10):
-    """Fetch latest crypto news from real RSS feeds"""
+def fetch_crypto_news_dynamic():
+    """Fetch latest crypto news from real RSS feeds organized by source"""
     import xml.etree.ElementTree as ET
     from datetime import datetime
-    
-    all_news = []
+    import re
     
     # RSS feed URLs
     rss_feeds = [
         {"url": "https://www.coindesk.com/arc/outboundfeeds/rss/", "source": "CoinDesk"},
         {"url": "https://cointelegraph.com/rss", "source": "Cointelegraph"},
-        {"url": "https://decrypt.co/feed", "source": "Decrypt"}
+        {"url": "https://decrypt.co/feed", "source": "Decrypt"},
+        {"url": "https://crypto.news/feed/", "source": "Crypto.news"},
+        {"url": "https://cryptopotato.com/feed/", "source": "CryptoPotato"},
+        {"url": "https://zycrypto.com/feed/", "source": "ZyCrypto"}
     ]
+    
+    def get_priority_score(title):
+        """Score news based on importance keywords"""
+        title_lower = title.lower()
+        score = 0
+        
+        # High priority keywords
+        if any(word in title_lower for word in ['bitcoin', 'btc', 'ethereum', 'eth']):
+            score += 10
+        if any(word in title_lower for word in ['regulation', 'government', 'policy', 'sec', 'fed']):
+            score += 8
+        if any(word in title_lower for word in ['market', 'price', 'surge', 'crash', 'rally']):
+            score += 6
+        if any(word in title_lower for word in ['breaking', 'major', 'significant']):
+            score += 5
+        
+        return score
+    
+    organized_news = {}
     
     for feed_info in rss_feeds:
         try:
@@ -1238,34 +1259,52 @@ def fetch_crypto_news_dynamic(max_headlines=10):
             # Extract items based on RSS structure
             items = root.findall('.//item')
             
-            for item in items:
-                if len(all_news) >= max_headlines:
-                    break
-                    
+            source_news = []
+            for item in items[:10]:  # Get top 10 from each source
                 title_elem = item.find('title')
                 link_elem = item.find('link')
+                pubdate_elem = item.find('pubDate')
                 
                 if title_elem is not None and link_elem is not None:
                     title = title_elem.text.strip() if title_elem.text else "No title"
                     link = link_elem.text.strip() if link_elem.text else "#"
                     
-                    all_news.append({
+                    # Extract time from pubDate if available
+                    time_ago = "now"
+                    if pubdate_elem is not None and pubdate_elem.text:
+                        try:
+                            # Parse pubDate and calculate time ago
+                            from dateutil import parser
+                            pub_date = parser.parse(pubdate_elem.text)
+                            now = datetime.now(pub_date.tzinfo)
+                            diff = now - pub_date
+                            
+                            if diff.days > 0:
+                                time_ago = f"{diff.days}d"
+                            elif diff.seconds > 3600:
+                                time_ago = f"{diff.seconds // 3600}h"
+                            else:
+                                time_ago = f"{diff.seconds // 60}m"
+                        except:
+                            time_ago = "now"
+                    
+                    source_news.append({
                         "title": title,
                         "url": link,
-                        "source": feed_info["source"]
+                        "time_ago": time_ago,
+                        "priority": get_priority_score(title)
                     })
+            
+            # Sort by priority and take top 4
+            source_news.sort(key=lambda x: x['priority'], reverse=True)
+            organized_news[feed_info["source"]] = source_news[:4]
                     
         except Exception as e:
             print(f"Error fetching {feed_info['source']}: {e}")
+            organized_news[feed_info["source"]] = []
             continue
     
-    # If no news was fetched, provide fallback
-    if not all_news:
-        all_news = [
-            {"title": "Unable to fetch news at this time", "url": "#", "source": "System"}
-        ]
-    
-    return all_news
+    return organized_news
 
 # Initialize enhanced crypto loader (with hybrid data fetching)
 @st.cache_resource
@@ -1462,23 +1501,30 @@ if mode == "Market Insights":
     # Market News Section
     st.subheader("Market News")
     
-    # Fetch live news (15 headlines by default)
+    # Fetch live news organized by source
     with st.spinner("Loading latest crypto news..."):
         try:
-            all_news = fetch_crypto_news_dynamic(max_headlines=15)
+            organized_news = fetch_crypto_news_dynamic()
         except Exception:
-            all_news = [{"title": "Unable to load news at this time", "url": "#", "source": "System"}]
+            organized_news = {}
     
     
-    # Unified news feed
-    if all_news:
-        for i, article in enumerate(all_news, 1):
-            source = article.get('source', 'Unknown')
-            title = article.get('title', 'No title')
-            url = article.get('url', '#')
-            
-            # Display each news item with source attribution and numbering
-            st.markdown(f"{i}. [{title}]({url}) *({source})*")
+    # Display news organized by source
+    if organized_news:
+        for source, articles in organized_news.items():
+            if articles:  # Only show sources with articles
+                st.markdown(f"**{source}** {articles[0]['time_ago']}")
+                st.markdown("")
+                
+                for article in articles:
+                    title = article.get('title', 'No title')
+                    url = article.get('url', '#')
+                    time_ago = article.get('time_ago', 'now')
+                    
+                    # Display each news item with source and time
+                    st.markdown(f"[{title}]({url})")
+                
+                st.markdown("")
     else:
         st.markdown("No news available at this time.")
     
