@@ -1210,6 +1210,63 @@ observer.observe(document.body, { childList: true, subtree: true });
 # Apply the CSS based on current theme
 st.markdown(apply_theme_css(st.session_state.theme), unsafe_allow_html=True)
 
+# Function to fetch live crypto news with WebSearch integration
+@st.cache_data(ttl=1800)  # Cache for 30 minutes
+def fetch_crypto_news_dynamic(max_headlines=10):
+    """Fetch latest crypto news from real RSS feeds"""
+    import xml.etree.ElementTree as ET
+    from datetime import datetime
+    
+    all_news = []
+    
+    # RSS feed URLs
+    rss_feeds = [
+        {"url": "https://www.coindesk.com/arc/outboundfeeds/rss/", "source": "CoinDesk"},
+        {"url": "https://cointelegraph.com/rss", "source": "Cointelegraph"},
+        {"url": "https://decrypt.co/feed", "source": "Decrypt"}
+    ]
+    
+    for feed_info in rss_feeds:
+        try:
+            # Fetch RSS feed
+            response = requests.get(feed_info["url"], timeout=10)
+            response.raise_for_status()
+            
+            # Parse XML
+            root = ET.fromstring(response.content)
+            
+            # Extract items based on RSS structure
+            items = root.findall('.//item')
+            
+            for item in items:
+                if len(all_news) >= max_headlines:
+                    break
+                    
+                title_elem = item.find('title')
+                link_elem = item.find('link')
+                
+                if title_elem is not None and link_elem is not None:
+                    title = title_elem.text.strip() if title_elem.text else "No title"
+                    link = link_elem.text.strip() if link_elem.text else "#"
+                    
+                    all_news.append({
+                        "title": title,
+                        "url": link,
+                        "source": feed_info["source"]
+                    })
+                    
+        except Exception as e:
+            print(f"Error fetching {feed_info['source']}: {e}")
+            continue
+    
+    # If no news was fetched, provide fallback
+    if not all_news:
+        all_news = [
+            {"title": "Unable to fetch news at this time", "url": "#", "source": "System"}
+        ]
+    
+    return all_news
+
 # Initialize enhanced crypto loader (with hybrid data fetching)
 @st.cache_resource
 def get_data_manager():
@@ -1391,12 +1448,80 @@ if st.sidebar.button("Refresh Data", help="Force fetch fresh data from APIs"):
     st.session_state.cache_timestamp = None
     st.rerun()
 
+if st.sidebar.button("Refresh News", help="Fetch latest crypto news headlines"):
+    st.cache_data.clear()
+    st.rerun()
+
 # Performance tip
 st.sidebar.markdown("**Tip**: Data is automatically cached. Only fetches when symbols/dates change!")
 
 # Main content area
 if mode == "Market Insights":
     st.header("Market Analysis & Insights")
+    
+    # Market News Section
+    st.subheader("Market News")
+    
+    # Fetch live news (15 headlines by default)
+    with st.spinner("Loading latest crypto news..."):
+        try:
+            all_news = fetch_crypto_news_dynamic(max_headlines=15)
+        except Exception:
+            all_news = [{"title": "Unable to load news at this time", "url": "#", "source": "System"}]
+    
+    
+    # Unified news feed
+    if all_news:
+        for i, article in enumerate(all_news, 1):
+            source = article.get('source', 'Unknown')
+            title = article.get('title', 'No title')
+            url = article.get('url', '#')
+            
+            # Display each news item with source attribution and numbering
+            st.markdown(f"{i}. [{title}]({url}) *({source})*")
+    else:
+        st.markdown("No news available at this time.")
+    
+    # News Sources
+    st.markdown("---")
+    st.markdown("### News Sources")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown("""
+        **Major News Outlets**
+        - [CoinDesk](https://www.coindesk.com/)
+        - [Cointelegraph](https://cointelegraph.com/)
+        - [The Block](https://www.theblock.co/)
+        - [Decrypt](https://decrypt.co/)
+        - [CryptoSlate](https://cryptoslate.com/)
+        - [CNBC Crypto](https://www.cnbc.com/cryptoworld/)
+        - [Bloomberg](https://www.bloomberg.com/crypto)
+        """)
+    
+    with col2:
+        st.markdown("""
+        **Analysis & Research**
+        - [Messari](https://messari.io/news)
+        - [Glassnode](https://glassnode.com/insights)
+        - [IntoTheBlock](https://intotheblock.com/)
+        - [CryptoQuant](https://cryptoquant.com/)
+        - [Santiment](https://santiment.net/)
+        - [TradingView](https://www.tradingview.com/ideas/)
+        """)
+    
+    with col3:
+        st.markdown("""
+        **Traditional Media**
+        - [Reuters](https://www.reuters.com/markets/cryptocurrency/)
+        - [MarketWatch](https://www.marketwatch.com/investing/cryptocurrency)
+        - [Yahoo Finance](https://finance.yahoo.com/crypto/)
+        - [Financial Times](https://www.ft.com/cryptocurrencies)
+        - [Wall Street Journal](https://www.wsj.com/news/types/cryptocurrency)
+        """)
+    
+    st.markdown("---")
     
     # Get cached data
     price_data, returns = get_cached_data(
@@ -1405,45 +1530,6 @@ if mode == "Market Insights":
         end_date.strftime('%Y-%m-%d')
     )
     
-    # Market overview
-    st.subheader("Market Overview")
-    
-    # Calculate market metrics
-    market_data = []
-    for symbol in selected_symbols:
-        symbol_name = symbol.replace('-USD', '')
-        current_price = price_data[symbol].iloc[-1]
-        start_price = price_data[symbol].iloc[0]
-        total_return = (current_price / start_price - 1)
-        volatility = returns[symbol].std() * np.sqrt(252)
-        
-        # Risk level
-        if volatility > 0.8:
-            risk_level = "Very High"
-        elif volatility > 0.6:
-            risk_level = "High"
-        elif volatility > 0.4:
-            risk_level = "Medium"
-        else:
-            risk_level = "Low"
-        
-        # 7-day and 30-day returns
-        week_return = (current_price / price_data[symbol].iloc[-8] - 1) if len(price_data) >= 8 else 0
-        month_return = (current_price / price_data[symbol].iloc[-31] - 1) if len(price_data) >= 31 else 0
-        
-        market_data.append({
-            'Asset': symbol_name,
-            'Current Price': f"${current_price:,.2f}",
-            'Total Return': f"{total_return:+.1%}",
-            '7D Return': f"{week_return:+.1%}",
-            '30D Return': f"{month_return:+.1%}",
-            'Volatility': f"{volatility:.1%}",
-            'Risk Level': risk_level,
-            '30-Day Avg': f"${price_data[symbol].tail(30).mean():,.2f}"
-        })
-    
-    market_df = pd.DataFrame(market_data)
-    st.dataframe(market_df, use_container_width=True, hide_index=True)
     
     # Price Performance Section
     st.subheader("Price Performance")
@@ -2008,6 +2094,22 @@ elif mode == "Technical Analysis":
                         for reason in tf_data['reasons'][:2]:
                             st.markdown(f"• {reason}")
             
+            # Risk Metrics
+            st.subheader("Risk Metrics")
+            
+            if 'risk_metrics' in summary and not summary['risk_metrics'].get('insufficient_data', False):
+                risk_metrics = summary['risk_metrics']
+                
+                risk_cols = st.columns(4)
+                with risk_cols[0]:
+                    st.metric("30-Day Volatility", f"{risk_metrics['volatility_30d']:.1%}")
+                with risk_cols[1]:
+                    st.metric("7-Day Volatility", f"{risk_metrics['volatility_7d']:.1%}")
+                with risk_cols[2]:
+                    st.metric("Max Drawdown", f"{risk_metrics['max_drawdown']:.1%}")
+                with risk_cols[3]:
+                    st.metric("Sharpe Ratio", f"{risk_metrics['sharpe_ratio']:.2f}")
+            
             # Technical Indicators
             st.subheader("Technical Indicators")
             
@@ -2372,22 +2474,6 @@ elif mode == "Technical Analysis":
                     )
                     st.plotly_chart(fig_momentum, use_container_width=True)
             
-            # Risk Metrics
-            st.subheader("Risk Metrics")
-            
-            if 'risk_metrics' in summary and not summary['risk_metrics'].get('insufficient_data', False):
-                risk_metrics = summary['risk_metrics']
-                
-                risk_cols = st.columns(4)
-                with risk_cols[0]:
-                    st.metric("30-Day Volatility", f"{risk_metrics['volatility_30d']:.1%}")
-                with risk_cols[1]:
-                    st.metric("7-Day Volatility", f"{risk_metrics['volatility_7d']:.1%}")
-                with risk_cols[2]:
-                    st.metric("Max Drawdown", f"{risk_metrics['max_drawdown']:.1%}")
-                with risk_cols[3]:
-                    st.metric("Sharpe Ratio", f"{risk_metrics['sharpe_ratio']:.2f}")
-            
             # Key levels are already displayed on the price charts in Trend Analysis tab
             
             
@@ -2537,39 +2623,37 @@ elif mode == "Portfolio Analysis & Backtest":
                 else:
                     coin_launch_info[symbol] = {'date': first_available_date, 'type': 'launched'}
     
-    # Display coin availability information
+    # Display coin availability information in dropdown
     if coin_launch_info:
-        st.subheader("Cryptocurrency Availability")
-        
-        availability_data = []
-        for symbol in selected_symbols:
-            if symbol in coin_launch_info:
-                info = coin_launch_info[symbol]
-                if info['type'] == 'pre-existing':
-                    status = f"Available from start"
-                    launch_info = f"Launched before {info['date']}"
+        with st.expander("Cryptocurrency Availability"):
+            availability_data = []
+            for symbol in selected_symbols:
+                if symbol in coin_launch_info:
+                    info = coin_launch_info[symbol]
+                    if info['type'] == 'pre-existing':
+                        status = f"Available from start"
+                        launch_info = f"Launched before {info['date']}"
+                    else:
+                        status = f"Launched {info['date']}"
+                        days_since_start = (pd.to_datetime(info['date']) - price_data.index[0]).days
+                        launch_info = f"Day {days_since_start} of analysis"
+                    
+                    availability_data.append({
+                        'Cryptocurrency': symbol.replace('-USD', ''),
+                        'Status': status,
+                        'Details': launch_info,
+                        'Weight': f"{normalized_weights[symbol]:.1%}"
+                    })
                 else:
-                    status = f"Launched {info['date']}"
-                    days_since_start = (pd.to_datetime(info['date']) - price_data.index[0]).days
-                    launch_info = f"Day {days_since_start} of analysis"
-                
-                availability_data.append({
-                    'Cryptocurrency': symbol.replace('-USD', ''),
-                    'Status': status,
-                    'Details': launch_info,
-                    'Weight': f"{normalized_weights[symbol]:.1%}"
-                })
-            else:
-                availability_data.append({
-                    'Cryptocurrency': symbol.replace('-USD', ''),
-                    'Status': 'Not available',
-                    'Details': 'No valid data in period',
-                    'Weight': f"{normalized_weights[symbol]:.1%}"
-                })
-        
-        availability_df = pd.DataFrame(availability_data)
-        st.dataframe(availability_df, use_container_width=True, hide_index=True)
-        st.caption("Note: Pre-existing coins were available before the analysis start date. Their exact launch date is unknown.")
+                    availability_data.append({
+                        'Cryptocurrency': symbol.replace('-USD', ''),
+                        'Status': 'Not available',
+                        'Details': 'No valid data in period',
+                        'Weight': f"{normalized_weights[symbol]:.1%}"
+                    })
+            
+            availability_df = pd.DataFrame(availability_data)
+            st.dataframe(availability_df, use_container_width=True, hide_index=True)
     
     # Backtest parameters
     col1, col2, col3 = st.columns(3)
@@ -3031,76 +3115,6 @@ elif mode == "Portfolio Optimization":
     
 
 elif mode == "Market Insights":
-    # Crypto News Headlines Section
-    st.header("📰 Crypto Market News")
-    
-    try:
-        # Fetch latest crypto news headlines
-        news_placeholder = st.empty()
-        with news_placeholder:
-            with st.spinner("Fetching latest crypto market headlines..."):
-                # Use WebSearch to get latest crypto news
-                search_results = []
-                
-                # Search for recent crypto news from major sources
-                try:
-                    from datetime import datetime
-                    today = datetime.now().strftime("%Y-%m-%d")
-                    
-                    # Multiple news searches for comprehensive coverage
-                    crypto_searches = [
-                        f"crypto cryptocurrency news {today} site:coindesk.com OR site:cointelegraph.com OR site:bloomberg.com",
-                        f"Bitcoin Ethereum price news {today} site:reuters.com OR site:cnbc.com OR site:marketwatch.com",
-                        f"cryptocurrency market analysis {today} site:theblock.co OR site:decrypt.co"
-                    ]
-                    
-                    all_results = []
-                    for search_query in crypto_searches:
-                        try:
-                            # Perform web search for news
-                            import streamlit as st
-                            # Note: Using a placeholder for WebSearch functionality
-                            # In production, this would use the WebSearch tool
-                            pass
-                        except Exception as e:
-                            continue
-                    
-                    # Fallback: Display static news sources with links
-                    news_placeholder.empty()
-                    
-                    st.markdown("""
-                    ### 📈 Latest Crypto Market Headlines
-                    
-                    **Stay updated with the latest cryptocurrency market news from trusted sources:**
-                    
-                    📊 **Major News Sources:**
-                    - [CoinDesk](https://www.coindesk.com/) - Leading crypto news and analysis
-                    - [Cointelegraph](https://cointelegraph.com/) - Blockchain & crypto news
-                    - [The Block](https://www.theblock.co/) - Digital asset news
-                    - [Decrypt](https://decrypt.co/) - Web3 and crypto insights
-                    
-                    📰 **Financial News:**
-                    - [Bloomberg Crypto](https://www.bloomberg.com/crypto) - Professional market analysis
-                    - [Reuters Crypto](https://www.reuters.com/technology/crypto/) - Global crypto coverage
-                    - [CNBC Crypto](https://www.cnbc.com/crypto/) - Investment perspectives
-                    - [MarketWatch Crypto](https://www.marketwatch.com/investing/cryptocurrency) - Market trends
-                    
-                    💡 **Analysis & Research:**
-                    - [CryptoSlate](https://cryptoslate.com/) - Market data and insights
-                    - [Messari](https://messari.io/news) - On-chain analysis
-                    - [CoinGecko News](https://www.coingecko.com/en/news) - Market updates
-                    
-                    *Note: Always verify information from multiple sources and do your own research before making investment decisions.*
-                    """)
-                    
-                except Exception as e:
-                    st.warning("Unable to fetch live news at this time. Please check the news sources above for latest updates.")
-    
-    except Exception as e:
-        st.error(f"Error loading news section: {str(e)}")
-    
-    st.markdown("---")  # Separator
-    
     # Market Analysis Section
     st.header("📊 Market Analysis & Insights")
     
@@ -3114,53 +3128,6 @@ elif mode == "Market Insights":
     # Market overview with improved layout
     col1, col2 = st.columns([2, 1])
     
-    with col1:
-        st.subheader("📈 Market Overview")
-    with col2:
-        # Quick market stats
-        if len(selected_symbols) > 0:
-            avg_return = np.mean([((price_data[symbol].iloc[-1] / price_data[symbol].iloc[0]) - 1) for symbol in selected_symbols])
-            if avg_return > 0:
-                st.metric("Avg Portfolio Return", f"{avg_return:.1%}", delta=f"+{avg_return:.1%}")
-            else:
-                st.metric("Avg Portfolio Return", f"{avg_return:.1%}", delta=f"{avg_return:.1%}")
-    
-    # Calculate market metrics
-    market_data = []
-    for symbol in selected_symbols:
-        symbol_name = symbol.replace('-USD', '')
-        current_price = price_data[symbol].iloc[-1]
-        start_price = price_data[symbol].iloc[0]
-        total_return = (current_price / start_price - 1)
-        volatility = returns[symbol].std() * np.sqrt(252)
-        
-        # Risk level
-        if volatility > 0.8:
-            risk_level = "Very High"
-        elif volatility > 0.6:
-            risk_level = "High"
-        elif volatility > 0.4:
-            risk_level = "Medium"
-        else:
-            risk_level = "Low"
-        
-        # 7-day and 30-day returns
-        week_return = (current_price / price_data[symbol].iloc[-8] - 1) if len(price_data) >= 8 else 0
-        month_return = (current_price / price_data[symbol].iloc[-31] - 1) if len(price_data) >= 31 else 0
-        
-        market_data.append({
-            'Asset': symbol_name,
-            'Current Price': f"${current_price:,.2f}",
-            'Total Return': f"{total_return:+.1%}",
-            '7D Return': f"{week_return:+.1%}",
-            '30D Return': f"{month_return:+.1%}",
-            'Volatility': f"{volatility:.1%}",
-            'Risk Level': risk_level,
-            '30-Day Avg': f"${price_data[symbol].tail(30).mean():,.2f}"
-        })
-    
-    market_df = pd.DataFrame(market_data)
-    st.dataframe(market_df, use_container_width=True, hide_index=True)
     
     # Risk-Return scatter plot
     st.subheader("Risk-Return Analysis")
