@@ -1584,7 +1584,7 @@ if mode == "Market Insights":
     st.plotly_chart(fig, use_container_width=True)
     
     # Market Correlation Matrix
-    st.subheader("🔗 Asset Correlation Matrix")
+    st.subheader("Asset Correlation Matrix")
     
     if len(selected_symbols) > 1:
         # Calculate correlation matrix
