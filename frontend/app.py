@@ -1217,6 +1217,7 @@ def fetch_crypto_news_dynamic():
     import xml.etree.ElementTree as ET
     from datetime import datetime
     import re
+    import html
     
     # RSS feed URLs
     rss_feeds = [
@@ -1266,7 +1267,22 @@ def fetch_crypto_news_dynamic():
                 pubdate_elem = item.find('pubDate')
                 
                 if title_elem is not None and link_elem is not None:
-                    title = title_elem.text.strip() if title_elem.text else "No title"
+                    # Extract title with proper text handling for mixed content
+                    if title_elem.text:
+                        title = title_elem.text.strip()
+                    else:
+                        # Handle CDATA or mixed content
+                        title = ET.tostring(title_elem, encoding='unicode', method='text').strip()
+                    
+                    # Decode HTML entities and normalize whitespace
+                    title = html.unescape(title)
+                    # Strip HTML tags that might cause formatting issues
+                    title = re.sub(r'<[^>]+>', '', title)
+                    title = re.sub(r'\s+', ' ', title).strip()  # Normalize whitespace
+                    
+                    # Fallback if title is still empty
+                    if not title:
+                        title = "No title"
                     link = link_elem.text.strip() if link_elem.text else "#"
                     
                     # Extract time from pubDate if available
@@ -1522,7 +1538,9 @@ if mode == "Market Insights":
                     time_ago = article.get('time_ago', 'now')
                     
                     # Display each news item with source and time
-                    st.markdown(f"[{title}]({url})")
+                    # Escape markdown characters in title to prevent formatting issues
+                    escaped_title = title.replace('_', r'\_').replace('*', r'\*').replace('[', r'\[').replace(']', r'\]').replace('$', r'\$')
+                    st.markdown(f"[{escaped_title}]({url})")
                 
                 st.markdown("")
     else:
