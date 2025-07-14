@@ -1211,7 +1211,7 @@ observer.observe(document.body, { childList: true, subtree: true });
 st.markdown(apply_theme_css(st.session_state.theme), unsafe_allow_html=True)
 
 # Function to fetch live crypto news with WebSearch integration
-@st.cache_data(ttl=1800)  # Cache for 30 minutes
+@st.cache_data(ttl=1800, show_spinner=False)  # Cache for 30 minutes
 def fetch_crypto_news_dynamic():
     """Fetch latest crypto news from real RSS feeds organized by source"""
     import xml.etree.ElementTree as ET
