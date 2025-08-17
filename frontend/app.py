@@ -39,6 +39,9 @@ import importlib
 import technical_analysis
 importlib.reload(technical_analysis)
 from technical_analysis import TechnicalAnalyzer
+import elliott_wave_analyzer
+importlib.reload(elliott_wave_analyzer)
+from elliott_wave_analyzer import ElliottWaveAnalyzer
 
 # Add backend/core to path for ML imports
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'backend', 'core'))
@@ -1366,7 +1369,7 @@ st.sidebar.markdown("""
 # Mode selection
 mode = st.sidebar.selectbox(
     "Select Mode",
-    ["Market Insights", "Technical Analysis", "Portfolio Analysis & Backtest", "Portfolio Optimization", "ML Predictions", "AI Investment Advisor"]
+    ["Market Insights", "Technical Analysis", "Elliott Wave Analysis", "Portfolio Analysis & Backtest", "Portfolio Optimization", "ML Predictions", "AI Investment Advisor"]
 )
 
 # Common parameters
@@ -2113,8 +2116,28 @@ elif mode == "Technical Analysis":
             signals = ta.analyze_signals()
             summary = ta.get_signal_summary()
             
-            # Signal Summary
+            # Signal Summary with Conflict Explanation
             st.subheader("Signal Summary")
+            
+            # Check for conflicting signals
+            overall_bullish = signals['overall'].get('bullish_signals', 0)
+            overall_bearish = signals['overall'].get('bearish_signals', 0)
+            has_conflicts = overall_bullish > 0 and overall_bearish > 0
+            
+            # Show info box if there are conflicting signals
+            if has_conflicts:
+                conflict_ratio = min(overall_bullish, overall_bearish) / max(overall_bullish, overall_bearish)
+                if conflict_ratio > 0.6:  # High conflict
+                    st.warning(
+                        "**Mixed Signals Detected**: Multiple indicators show conflicting signals. "
+                        "This often occurs at market turning points or during consolidation periods. "
+                        "Consider waiting for clearer signals or using smaller position sizes."
+                    )
+                elif conflict_ratio > 0.3:  # Moderate conflict
+                    st.info(
+                        "**Divergent Indicators**: Some indicators conflict with the overall trend. "
+                        "The dominant signal direction is based on weighted indicator importance."
+                    )
             
             # Clean metrics layout
             col1, col2, col3, col4 = st.columns(4)
@@ -2129,13 +2152,67 @@ elif mode == "Technical Analysis":
             
             with col3:
                 confidence = signals['overall']['confidence']
-                st.metric("Confidence", f"{confidence:.1%}")
+                conf_delta = "High" if confidence > 0.7 else "Medium" if confidence > 0.4 else "Low"
+                st.metric("Confidence", f"{confidence:.1%}", delta=conf_delta)
             
             with col4:
                 strength = signals['overall']['strength']
                 st.metric("Signal Strength", f"{strength:.1%}")
             
-            # Timeframe Analysis
+            # Add Indicator Consensus Chart
+            if has_conflicts or overall_bullish + overall_bearish > 3:
+                with st.expander("View Indicator Consensus Details", expanded=False):
+                    consensus_col1, consensus_col2 = st.columns([2, 1])
+                    
+                    with consensus_col1:
+                        # Create a simple bar chart showing signal distribution
+                        consensus_data = {
+                            'Bullish Signals': overall_bullish,
+                            'Bearish Signals': overall_bearish,
+                            'Neutral Signals': signals['overall'].get('total_signals', 0) - overall_bullish - overall_bearish
+                        }
+                        
+                        import plotly.graph_objects as go
+                        fig_consensus = go.Figure(data=[
+                            go.Bar(
+                                x=list(consensus_data.keys()),
+                                y=list(consensus_data.values()),
+                                marker_color=['green', 'red', 'gray'],
+                                text=list(consensus_data.values()),
+                                textposition='auto',
+                            )
+                        ])
+                        fig_consensus.update_layout(
+                            title="Indicator Signal Distribution",
+                            yaxis_title="Number of Indicators",
+                            height=250,
+                            showlegend=False
+                        )
+                        st.plotly_chart(fig_consensus, use_container_width=True)
+                    
+                    with consensus_col2:
+                        st.markdown("**Interpretation Guide:**")
+                        st.markdown("• **Unanimous**: All indicators agree")
+                        st.markdown("• **Strong**: 70%+ indicators agree")  
+                        st.markdown("• **Moderate**: 50-70% agreement")
+                        st.markdown("• **Weak**: <50% agreement")
+                        
+                        # Calculate consensus strength
+                        total_signals = signals['overall'].get('total_signals', 0)
+                        if total_signals > 0:
+                            max_signals = max(overall_bullish, overall_bearish)
+                            consensus_pct = (max_signals / total_signals) * 100
+                            
+                            if consensus_pct >= 90:
+                                st.success(f"Unanimous consensus ({consensus_pct:.0f}%)")
+                            elif consensus_pct >= 70:
+                                st.success(f"Strong consensus ({consensus_pct:.0f}%)")
+                            elif consensus_pct >= 50:
+                                st.warning(f"Moderate consensus ({consensus_pct:.0f}%)")
+                            else:
+                                st.error(f"Weak consensus ({consensus_pct:.0f}%)")
+            
+            # Timeframe Analysis with Enhanced Signal Presentation
             st.subheader("Timeframe Analysis")
             
             timeframe_cols = st.columns(3)
@@ -2148,15 +2225,54 @@ elif mode == "Technical Analysis":
                     signal = tf_data['signal'].upper()
                     
                     st.markdown(f"**{name}**")
+                    
+                    # Professional signal display
                     st.metric("Signal", signal)
                     st.metric("Strength", f"{tf_data['strength']:.1%}")
                     st.metric("Confidence", f"{tf_data['confidence']:.1%}")
                     
-                    # Show key factors
+                    # Enhanced signal breakdown showing conflicts
+                    if tf_data.get('bullish_signals', 0) > 0 or tf_data.get('bearish_signals', 0) > 0:
+                        st.markdown("**Signal Breakdown:**")
+                        bullish_count = tf_data.get('bullish_signals', 0)
+                        bearish_count = tf_data.get('bearish_signals', 0)
+                        total_count = tf_data.get('total_signals', 0)
+                        
+                        # Show signal distribution
+                        if bullish_count > 0:
+                            st.markdown(f"**Bullish**: {bullish_count}/{total_count} indicators")
+                        if bearish_count > 0:
+                            st.markdown(f"**Bearish**: {bearish_count}/{total_count} indicators")
+                        if total_count - bullish_count - bearish_count > 0:
+                            st.markdown(f"**Neutral**: {total_count - bullish_count - bearish_count}/{total_count} indicators")
+                    
+                    # Show key factors with better categorization
                     if tf_data['reasons']:
-                        st.markdown("**Key Factors:**")
-                        for reason in tf_data['reasons'][:2]:
-                            st.markdown(f"• {reason}")
+                        st.markdown("**Key Indicators:**")
+                        # Group signals by type
+                        bullish_reasons = []
+                        bearish_reasons = []
+                        neutral_reasons = []
+                        
+                        for reason in tf_data['reasons']:
+                            reason_lower = reason.lower()
+                            if 'bullish' in reason_lower or 'oversold' in reason_lower or 'above' in reason_lower:
+                                bullish_reasons.append(reason)
+                            elif 'bearish' in reason_lower or 'overbought' in reason_lower or 'below' in reason_lower:
+                                bearish_reasons.append(reason)
+                            else:
+                                neutral_reasons.append(reason)
+                        
+                        # Display grouped reasons with professional indicators
+                        if bullish_reasons:
+                            for reason in bullish_reasons[:2]:
+                                st.markdown(f"• **Bullish**: {reason}")
+                        if bearish_reasons:
+                            for reason in bearish_reasons[:2]:
+                                st.markdown(f"• **Bearish**: {reason}")
+                        if neutral_reasons and not (bullish_reasons or bearish_reasons):
+                            for reason in neutral_reasons[:2]:
+                                st.markdown(f"• **Neutral**: {reason}")
             
             # Risk Metrics
             st.subheader("Risk Metrics")
@@ -2540,6 +2656,7 @@ elif mode == "Technical Analysis":
             
             # Key levels are already displayed on the price charts in Trend Analysis tab
             
+            # Removed Elliott Wave tab - now has its own section
             
         else:
             st.error("Unable to load data for the selected cryptocurrency. Please try again.")
@@ -2547,6 +2664,345 @@ elif mode == "Technical Analysis":
     except Exception as e:
         st.error(f"Error in technical analysis: {str(e)}")
         st.info("Please ensure you have selected a valid cryptocurrency and time period.")
+
+elif mode == "Elliott Wave Analysis":
+    st.header("Elliott Wave Analysis")
+    st.markdown("*Clean wave identification with support/resistance levels*")
+    
+    # Only show cryptocurrencies that are selected in the sidebar
+    available_coins = [coin for coin in selected_symbols if coin in crypto_symbols]
+    
+    if not available_coins:
+        st.warning("Please select at least one cryptocurrency from the sidebar.")
+        st.stop()
+    
+    # User controls for wave calculation
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        selected_coin = st.selectbox(
+            "Choose cryptocurrency",
+            options=available_coins,
+            key="ew_coin_selection"
+        )
+    
+    with col2:
+        st.markdown("**Wave Calculation Settings**")
+        adaptive_mode = st.toggle("Adaptive Wave Detection", value=True, help="Automatically adjust wave sensitivity based on timeframe characteristics")
+    
+    # Advanced controls (when adaptive mode is off)
+    if not adaptive_mode:
+        st.subheader("Manual Wave Parameters")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            short_swing = st.slider("Short Term Swing %", 0.1, 2.0, 0.5, 0.1, help="Minimum price move to detect short-term waves")
+        with col2:
+            medium_swing = st.slider("Medium Term Swing %", 1.0, 5.0, 2.0, 0.1, help="Minimum price move to detect medium-term waves")
+        with col3:
+            long_swing = st.slider("Long Term Swing %", 2.0, 10.0, 4.0, 0.1, help="Minimum price move to detect long-term waves")
+        
+        # Additional fine-tuning controls
+        with st.expander("Advanced Pattern Recognition Settings"):
+            col1, col2 = st.columns(2)
+            with col1:
+                confidence_threshold = st.slider("Pattern Confidence Threshold", 0.1, 0.9, 0.5, 0.05, 
+                                               help="Higher values require more strict wave pattern validation")
+                adaptive_labeling = st.checkbox("Adaptive Wave Labeling", True, 
+                                               help="Adjust wave labels based on pattern complexity")
+            with col2:
+                analysis_depth = st.selectbox("Analysis Depth", 
+                                            ["Conservative", "Standard", "Aggressive"],
+                                            index=1,
+                                            help="Conservative: Fewer, higher-confidence patterns. Aggressive: More patterns, lower confidence threshold")
+                show_debug = st.checkbox("Show Analysis Details", False, 
+                                       help="Display detailed information about wave detection process")
+    else:
+        # Set default values for adaptive mode
+        confidence_threshold = 0.5
+        adaptive_labeling = True
+        analysis_depth = "Standard"
+        show_debug = False
+    
+    # Get data for the selected coin
+    try:
+        coin_data = data_manager.get_real_data([selected_coin], start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
+        if coin_data is not None and not coin_data.empty:
+            coin_series = coin_data[selected_coin].dropna()
+            
+            if len(coin_series) < 50:
+                st.warning(f"Need at least 50 days of data. Current: {len(coin_series)} days")
+                st.stop()
+            
+            # Adaptive timeframe configuration based on user settings and data characteristics
+            if adaptive_mode:
+                # Calculate adaptive swing thresholds based on volatility
+                coin_volatility = coin_series.pct_change().std() * 100  # Daily volatility as percentage
+                
+                # Adaptive scaling based on volatility
+                volatility_multiplier = max(0.5, min(2.0, coin_volatility / 3.0))  # Scale between 0.5x and 2x
+                
+                timeframes = {
+                    'Short Term': {
+                        'swing_pct': 0.3 * volatility_multiplier, 
+                        'days_back': min(30, max(14, len(coin_series) // 10)),  # Adaptive period
+                        'period': f'Last {min(30, max(14, len(coin_series) // 10))} Days'
+                    },
+                    'Medium Term': {
+                        'swing_pct': 1.5 * volatility_multiplier, 
+                        'days_back': min(90, max(30, len(coin_series) // 4)),
+                        'period': f'Last {min(90, max(30, len(coin_series) // 4))} Days'
+                    }, 
+                    'Long Term': {
+                        'swing_pct': 3.0 * volatility_multiplier, 
+                        'days_back': None, 
+                        'period': f'Full Period ({len(coin_series)} days)'
+                    }
+                }
+                
+                st.info(f"Adaptive mode: Detected {coin_volatility:.1f}% daily volatility. Swing thresholds scaled by {volatility_multiplier:.1f}x")
+            else:
+                # Use manual user-defined settings
+                timeframes = {
+                    'Short Term': {'swing_pct': short_swing, 'days_back': 30, 'period': 'Last 30 Days'},
+                    'Medium Term': {'swing_pct': medium_swing, 'days_back': 90, 'period': 'Last 3 Months'}, 
+                    'Long Term': {'swing_pct': long_swing, 'days_back': None, 'period': 'Full Period'}
+                }
+            
+            st.subheader("Wave Analysis")
+            
+            # Create tabs for each timeframe
+            tab_short, tab_medium, tab_long = st.tabs(["Short Term", "Medium Term", "Long Term"])
+            
+            for tab, (timeframe_name, config) in zip([tab_short, tab_medium, tab_long], timeframes.items()):
+                with tab:
+                    try:
+                        # Get timeframe-specific data
+                        if config['days_back'] is not None:
+                            # Use only recent data for short/medium term
+                            timeframe_series = coin_series.tail(config['days_back'])
+                        else:
+                            # Use full data for long term
+                            timeframe_series = coin_series
+                        
+                        # Show timeframe context with Elliott Wave degree
+                        degree_map = {
+                            'Short Term': 'Minor Degree (waves: i,ii,iii,iv,v or a,b,c)',
+                            'Medium Term': 'Intermediate Degree (waves: i,ii,iii,iv,v or a,b,c)',
+                            'Long Term': 'Primary Degree (waves: i,ii,iii,iv,v or a,b,c)'
+                        }
+                        st.caption(f"{config['period']} | {len(timeframe_series)} days | {config['swing_pct']:.1f}% swings")
+                        st.caption(f"**{degree_map[timeframe_name]}**")
+                        
+                        # Analyze for this timeframe
+                        analyzer = ElliottWaveAnalyzer(timeframe_series, config['swing_pct'])
+                        analysis = analyzer.get_clean_wave_analysis()
+                        
+                        # Clean wave analysis summary
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            st.metric("Wave Pattern", f"{analysis['wave_count']} {analysis['pattern_type']}")
+                        with col2:
+                            st.metric("Direction", analysis['wave_direction'])
+                        with col3:
+                            confidence = analysis['pattern_confidence']
+                            conf_text = f"{confidence:.0%}" if confidence > 0 else "Low"
+                            conf_color = "normal" if confidence > 0.5 else "inverse"
+                            st.metric("Confidence", conf_text)
+                        
+                        # Current position with better formatting
+                        st.info(f"**Current Wave Position:** {analysis['current_position']}")
+                        
+                        # Create clean chart focused on timeframe period
+                        fig = go.Figure()
+                        
+                        # Add price line for the specific timeframe
+                        fig.add_trace(go.Scatter(
+                            x=timeframe_series.index,
+                            y=timeframe_series,
+                            mode='lines',
+                            name=f'{selected_coin}',
+                            line=dict(color='#2E86AB', width=3)
+                        ))
+                        
+                        # Add wave points
+                        wave_points = analyzer.wave_points[-8:]  # Last 8 points
+                        if len(wave_points) >= 3:
+                            wave_dates = [p.date for p in wave_points]
+                            wave_prices = [p.price for p in wave_points]
+                            wave_types = [p.point_type for p in wave_points]
+                            
+                            # Add wave markers
+                            fig.add_trace(go.Scatter(
+                                x=wave_dates,
+                                y=wave_prices,
+                                mode='markers+lines',
+                                name='Wave Points',
+                                marker=dict(
+                                    size=10,
+                                    color='red',
+                                    symbol=['triangle-down' if t == 'high' else 'triangle-up' for t in wave_types]
+                                ),
+                                line=dict(color='orange', width=1, dash='dot')
+                            ))
+                            
+                            # Add wave labels with high contrast visibility
+                            labels = analysis['wave_labels']
+                            for i, (point, label) in enumerate(zip(wave_points, labels)):
+                                if i < len(labels):
+                                    # Alternate label positions to reduce overlap
+                                    y_offset = 25 if point.point_type == 'high' else -35
+                                    
+                                    fig.add_annotation(
+                                        x=point.date,
+                                        y=point.price,
+                                        text=f"<b>{label}</b>",
+                                        showarrow=True,
+                                        arrowhead=2,
+                                        arrowsize=1.5,
+                                        arrowcolor="black",
+                                        ax=0,
+                                        ay=y_offset,
+                                        font=dict(size=16, color="black", family="Arial Black"),
+                                        bgcolor="yellow",
+                                        bordercolor="black",
+                                        borderwidth=2,
+                                        opacity=1.0
+                                    )
+                        
+                        # Add clean support/resistance levels (timeframe-specific)
+                        key_levels = analysis['key_levels']
+                        current_price = timeframe_series.iloc[-1]
+                        
+                        # Show clean support/resistance lines without price labels (shown in summary below)
+                        if key_levels['support']:
+                            closest_support = key_levels['support'][0]
+                            fig.add_hline(
+                                y=closest_support['price'],
+                                line_dash="dash",
+                                line_color="green",
+                                line_width=2,
+                                opacity=0.7,
+                                annotation_text="Support",
+                                annotation_position="bottom left",
+                                annotation_font_size=10,
+                                annotation_font_color="green"
+                            )
+                        
+                        if key_levels['resistance']:
+                            closest_resistance = key_levels['resistance'][0]
+                            fig.add_hline(
+                                y=closest_resistance['price'],
+                                line_dash="dash",
+                                line_color="red",
+                                line_width=2,
+                                opacity=0.7,
+                                annotation_text="Resistance",
+                                annotation_position="top left",
+                                annotation_font_size=10,
+                                annotation_font_color="red"
+                            )
+                        
+                        fig.update_layout(
+                            title=f"{timeframe_name} Analysis - {selected_coin} ({config['period']})",
+                            xaxis_title="Date",
+                            yaxis_title="Price (USD)",
+                            height=450,
+                            showlegend=True,
+                            legend=dict(
+                                orientation="h",
+                                yanchor="top",
+                                y=-0.15,
+                                xanchor="center",
+                                x=0.5
+                            ),
+                            margin=dict(l=50, r=50, t=50, b=80),
+                            template="plotly_white"
+                        )
+                        
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Key levels summary
+                        st.subheader("Key Trading Levels")
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            st.metric("Current Price", f"${current_price:.0f}")
+                        
+                        with col2:
+                            if key_levels['support']:
+                                support_price = key_levels['support'][0]['price']
+                                support_distance = ((support_price - current_price) / current_price) * 100
+                                st.metric("Nearest Support", f"${support_price:.0f}", delta=f"{support_distance:+.1f}%")
+                            else:
+                                st.metric("Nearest Support", "None detected")
+                        
+                        with col3:
+                            if key_levels['resistance']:
+                                resistance_price = key_levels['resistance'][0]['price']
+                                resistance_distance = ((resistance_price - current_price) / current_price) * 100
+                                st.metric("Nearest Resistance", f"${resistance_price:.0f}", delta=f"{resistance_distance:+.1f}%")
+                            else:
+                                st.metric("Nearest Resistance", "None detected")
+                    
+                    except Exception as e:
+                        st.error(f"Error in {timeframe_name} analysis: {str(e)}")
+                        st.info("Try extending the time period for better wave identification.")
+            
+            # Elliott Wave Theory Reference
+            st.markdown("---")
+            st.subheader("Elliott Wave Theory Reference")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("""
+                **Impulse Waves (5-Wave Pattern)**
+                - **Wave i**: First impulse move
+                - **Wave ii**: Corrective retracement (never retraces >100% of wave i)
+                - **Wave iii**: Strong impulse move (often longest, never shortest)
+                - **Wave iv**: Corrective retracement (never overlaps wave i territory)
+                - **Wave v**: Final impulse move
+                
+                **Rules:**
+                - Wave ii never retraces more than 100% of wave i
+                - Wave iii is never the shortest of waves i, iii, and v
+                - Wave iv never overlaps with wave i price territory
+                """)
+            
+            with col2:
+                st.markdown("""
+                **Corrective Waves (3-Wave Pattern)**
+                - **Wave a**: First corrective move against main trend
+                - **Wave b**: Counter-trend retracement of wave a
+                - **Wave c**: Final corrective move, often extends beyond wave a
+                
+                **Common Patterns:**
+                - **Zigzag**: Sharp corrective pattern (5-3-5 structure)
+                - **Flat**: Sideways corrective pattern (3-3-5 structure)
+                - **Triangle**: Contracting pattern before final move
+                
+                **Fibonacci Relationships:**
+                - Wave ii often retraces 38.2% or 61.8% of wave i
+                - Wave iv often retraces 23.6% or 38.2% of wave iii
+                - Wave c often equals wave a or extends 161.8% of wave a
+                """)
+            
+            st.info("""
+            **Important Notes:**
+            - Elliott Wave analysis is subjective and patterns can be interpreted differently
+            - Multiple valid wave counts may exist simultaneously
+            - Wave patterns work best when combined with other technical analysis
+            - Short-term charts may show sub-waves within larger degree waves
+            - Always consider multiple timeframes for complete perspective
+            """)
+        
+        else:
+            st.error("Unable to load data for the selected cryptocurrency.")
+    
+    except Exception as e:
+        st.error(f"Error loading data: {str(e)}")
 
 elif mode == "Portfolio Analysis & Backtest":
     st.header("Portfolio Analysis & Backtesting")
@@ -3180,7 +3636,7 @@ elif mode == "Portfolio Optimization":
 
 elif mode == "Market Insights":
     # Market Analysis Section
-    st.header("📊 Market Analysis & Insights")
+    st.header("Market Analysis & Insights")
     
     # Get cached data
     price_data, returns = get_cached_data(
@@ -3468,7 +3924,7 @@ elif mode == "ML Predictions":
         
         # Check if we have data
         if price_data is None or price_data.empty:
-            st.error("❌ No price data available for the selected period and cryptocurrencies.")
+            st.error("No price data available for the selected period and cryptocurrencies.")
             st.info("Try selecting a longer date range or different cryptocurrencies.")
             st.stop()
             
@@ -3477,7 +3933,7 @@ elif mode == "ML Predictions":
         st.info(f"Loaded data for {len(selected_symbols)} cryptocurrencies from {ml_start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')} ({total_days_loaded} days)")
         
     except Exception as e:
-        st.error(f"❌ Error loading data: {str(e)}")
+        st.error(f"Error loading data: {str(e)}")
         st.stop()
     
     # Feature engineering function
@@ -4025,10 +4481,10 @@ elif mode == "ML Predictions":
     
     # Clear progress indicators
     progress_bar.empty()
-    status_text.text("✅ Model training completed!")
+    status_text.text("Model training completed successfully!")
     
     if not all_predictions_data:
-        st.error("❌ No successful predictions were generated for any of the selected cryptocurrencies.")
+        st.error("No successful predictions were generated for any of the selected cryptocurrencies.")
         st.info("This could be due to:")
         st.write("""
         - Insufficient historical data (need at least 30-90 days)
@@ -4670,11 +5126,11 @@ elif mode == "AI Investment Advisor":
         # Try to extract the actual prediction period from session state
         # For now, we'll check if there's a way to get it, otherwise default to common values
         prediction_days = getattr(st.session_state, 'ml_prediction_days', 7)  # Get actual training period
-        st.sidebar.info(f"📊 Using ML models trained for **{prediction_days}-day** predictions")
+        st.sidebar.info(f"Using ML models trained for **{prediction_days}-day** predictions")
         st.sidebar.caption("💡 To change prediction period, retrain models in ML Predictions section")
     else:
         prediction_days = 7  # Default fallback
-        st.sidebar.warning("⚠️ No ML predictions available")
+        st.sidebar.warning("No ML predictions available")
         st.sidebar.caption("👉 Run ML Predictions first to get CV-tuned results")
     
     # Current Portfolio Definition
