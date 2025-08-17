@@ -616,38 +616,124 @@ class ElliottWaveAnalyzer:
         return points[0].point_type != points[2].point_type
     
     def _get_trading_levels(self) -> Dict:
-        """Get key support and resistance levels for trading"""
+        """Get key support and resistance levels for trading - ENHANCED VERSION"""
         if len(self.wave_points) < 2:
             return {'support': [], 'resistance': []}
         
         current_price = self.price_data.iloc[-1]
         
-        support_levels = []
-        resistance_levels = []
-        
-        # Get support/resistance from wave points
-        for point in self.wave_points[-5:]:  # Last 5 significant points
-            if point.price < current_price:
-                support_levels.append({
-                    'price': point.price,
-                    'type': point.point_type,
-                    'strength': 'High' if point.point_type == 'low' else 'Medium'
-                })
-            else:
-                resistance_levels.append({
-                    'price': point.price,
-                    'type': point.point_type,
-                    'strength': 'High' if point.point_type == 'high' else 'Medium'
-                })
-        
-        # Sort by proximity to current price
-        support_levels.sort(key=lambda x: abs(x['price'] - current_price))
-        resistance_levels.sort(key=lambda x: abs(x['price'] - current_price))
-        
-        return {
-            'support': support_levels[:3],  # Top 3 support levels
-            'resistance': resistance_levels[:3]  # Top 3 resistance levels
-        }
+        # Import the enhanced calculator with ZONES
+        try:
+            from support_resistance_zones import SupportResistanceZoneCalculator
+            # Debug: Using zones module for proper zone support
+            
+            # Use enhanced S/R zone calculator
+            zone_calculator = SupportResistanceZoneCalculator(self.price_data)
+            
+            # Get Fibonacci levels from patterns if they exist
+            fibonacci_levels = []
+            if self.patterns:
+                for pattern in self.patterns:
+                    if hasattr(pattern, 'fibonacci_levels'):
+                        fibonacci_levels.extend(pattern.fibonacci_levels)
+            
+            # Get enhanced ZONES with minimum 1% distance
+            enhanced_zones = zone_calculator.calculate_sr_zones(
+                wave_points=self.wave_points if self.wave_points else [],
+                fibonacci_levels=fibonacci_levels,
+                min_zone_width_pct=0.3,
+                max_zone_width_pct=2.0,
+                min_distance_pct=1.0,  # Minimum 1% away from current price
+                max_zones=5
+            )
+            
+            # Convert to format with ZONE information for frontend
+            support_levels = []
+            for level in enhanced_zones['support_zones']:
+                # Handle SupportResistanceZone objects
+                if hasattr(level, 'zone_center'):  # Zone object format
+                    support_levels.append({
+                        'price': level.zone_center,  # Zone center (for compatibility)
+                        'zone_low': level.zone_low,  # Zone bottom
+                        'zone_high': level.zone_high,  # Zone top
+                        'zone_width_pct': level.zone_width_pct,  # Zone width %
+                        'type': 'support',
+                        'strength': 'High' if level.strength > 70 else 'Medium' if level.strength > 40 else 'Low',
+                        'enhanced_strength': level.strength,
+                        'source': ', '.join(level.sources) if hasattr(level, 'sources') else 'unknown',
+                        'distance_pct': level.distance_from_current_pct,
+                        'touch_count': level.touch_count,
+                        'is_zone': True  # This is definitely a zone
+                    })
+                else:  # Dictionary format
+                    support_levels.append(level)
+            
+            resistance_levels = []
+            for level in enhanced_zones['resistance_zones']:
+                # Handle SupportResistanceZone objects
+                if hasattr(level, 'zone_center'):  # Zone object format
+                    resistance_levels.append({
+                        'price': level.zone_center,  # Zone center (for compatibility)
+                        'zone_low': level.zone_low,  # Zone bottom  
+                        'zone_high': level.zone_high,  # Zone top
+                        'zone_width_pct': level.zone_width_pct,  # Zone width %
+                        'type': 'resistance',
+                        'strength': 'High' if level.strength > 70 else 'Medium' if level.strength > 40 else 'Low',
+                        'enhanced_strength': level.strength,
+                        'source': ', '.join(level.sources) if hasattr(level, 'sources') else 'unknown',
+                        'distance_pct': level.distance_from_current_pct,
+                        'touch_count': level.touch_count,
+                        'is_zone': True  # This is definitely a zone
+                    })
+                else:  # Dictionary format
+                    resistance_levels.append(level)
+            
+            return {
+                'support': support_levels[:3],  # Top 3 support levels
+                'resistance': resistance_levels[:3]  # Top 3 resistance levels
+            }
+            
+        except ImportError:
+            # Fallback to old method if enhanced module not available
+            # BUT with minimum distance filtering added
+            support_levels = []
+            resistance_levels = []
+            
+            # Get support/resistance from wave points
+            for point in self.wave_points[-10:]:  # Check more points
+                distance_pct = abs(point.price - current_price) / current_price * 100
+                
+                # Skip levels too close to current price (within 1%)
+                if distance_pct < 1.0:
+                    continue
+                
+                if point.price < current_price:
+                    support_levels.append({
+                        'price': point.price,
+                        'type': point.point_type,
+                        'strength': 'High' if point.point_type == 'low' else 'Medium',
+                        'distance_pct': distance_pct
+                    })
+                else:
+                    resistance_levels.append({
+                        'price': point.price,
+                        'type': point.point_type,
+                        'strength': 'High' if point.point_type == 'high' else 'Medium',
+                        'distance_pct': distance_pct
+                    })
+            
+            # Sort by strength (High first) then by distance
+            def sort_key(x):
+                strength_score = 2 if x['strength'] == 'High' else 1
+                return (-strength_score, x['distance_pct'])
+            
+            support_levels.sort(key=sort_key)
+            resistance_levels.sort(key=sort_key)
+            
+            return {
+                'support': support_levels[:3],  # Top 3 support levels
+                'resistance': resistance_levels[:3]  # Top 3 resistance levels
+            }
     
     def _get_next_targets(self) -> Dict:
         """Get next price targets based on Elliott Wave theory"""

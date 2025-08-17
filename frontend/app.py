@@ -1657,11 +1657,11 @@ if mode == "Market Insights":
         # Calculate correlation matrix
         corr_matrix = returns.corr()
         
-        # Create correlation heatmap
+        # Create correlation heatmap with reversed y-axis
         fig_corr = go.Figure(data=go.Heatmap(
-            z=corr_matrix.values,
+            z=corr_matrix.values[::-1],  # Reverse the order of rows
             x=[symbol.replace('-USD', '') for symbol in corr_matrix.columns],
-            y=[symbol.replace('-USD', '') for symbol in corr_matrix.index],
+            y=[symbol.replace('-USD', '') for symbol in reversed(corr_matrix.index)],  # Reverse y-axis labels
             colorscale=[
                 [0.0, '#2166ac'],    # Dark blue for -1 (inverse correlation)
                 [0.25, '#5aae61'],   # Green for -0.5
@@ -1672,7 +1672,7 @@ if mode == "Market Insights":
             zmid=0,
             zmin=-1,
             zmax=1,
-            text=corr_matrix.round(3).values,
+            text=corr_matrix.round(3).values[::-1],  # Reverse text values to match data
             texttemplate="%{text}",
             textfont={"size": 12, "color": "black"},
             hoverongaps=False,
@@ -2875,38 +2875,80 @@ elif mode == "Elliott Wave Analysis":
                         key_levels = analysis['key_levels']
                         current_price = timeframe_series.iloc[-1]
                         
-                        # Show clean support/resistance lines without price labels (shown in summary below)
+                        # Show support/resistance zones (if enhanced) or lines (if fallback)
                         if key_levels['support']:
                             closest_support = key_levels['support'][0]
-                            fig.add_hline(
-                                y=closest_support['price'],
-                                line_dash="dash",
-                                line_color="green",
-                                line_width=2,
-                                opacity=0.7,
-                                annotation_text="Support",
-                                annotation_position="bottom left",
-                                annotation_font_size=10,
-                                annotation_font_color="green"
-                            )
+                            
+                            # Check if this is a zone or single price
+                            if closest_support.get('is_zone', False):
+                                # Draw support ZONE as filled rectangle
+                                zone_low = closest_support['zone_low']
+                                zone_high = closest_support['zone_high']
+                                x_start = timeframe_series.index[0]
+                                x_end = timeframe_series.index[-1]
+                                
+                                fig.add_shape(
+                                    type="rect",
+                                    x0=x_start, x1=x_end,
+                                    y0=zone_low, y1=zone_high,
+                                    fillcolor="rgba(0,255,0,0.15)",  # Light green fill
+                                    line=dict(color="rgba(0,255,0,0.3)", width=1),
+                                    layer="below"
+                                )
+                                
+                                # Zone range is shown in metrics below, no need for chart label
+                            else:
+                                # Fallback to single line
+                                fig.add_hline(
+                                    y=closest_support['price'],
+                                    line_dash="dash",
+                                    line_color="green",
+                                    line_width=2,
+                                    opacity=0.7,
+                                    annotation_text="Support",
+                                    annotation_position="bottom left",
+                                    annotation_font_size=10,
+                                    annotation_font_color="green"
+                                )
                         
                         if key_levels['resistance']:
                             closest_resistance = key_levels['resistance'][0]
-                            fig.add_hline(
-                                y=closest_resistance['price'],
-                                line_dash="dash",
-                                line_color="red",
-                                line_width=2,
-                                opacity=0.7,
-                                annotation_text="Resistance",
-                                annotation_position="top left",
-                                annotation_font_size=10,
-                                annotation_font_color="red"
-                            )
+                            
+                            # Check if this is a zone or single price
+                            if closest_resistance.get('is_zone', False):
+                                # Draw resistance ZONE as filled rectangle
+                                zone_low = closest_resistance['zone_low']
+                                zone_high = closest_resistance['zone_high']
+                                x_start = timeframe_series.index[0]
+                                x_end = timeframe_series.index[-1]
+                                
+                                fig.add_shape(
+                                    type="rect",
+                                    x0=x_start, x1=x_end,
+                                    y0=zone_low, y1=zone_high,
+                                    fillcolor="rgba(255,0,0,0.15)",  # Light red fill
+                                    line=dict(color="rgba(255,0,0,0.3)", width=1),
+                                    layer="below"
+                                )
+                                
+                                # Zone range is shown in metrics below, no need for chart label
+                            else:
+                                # Fallback to single line
+                                fig.add_hline(
+                                    y=closest_resistance['price'],
+                                    line_dash="dash",
+                                    line_color="red",
+                                    line_width=2,
+                                    opacity=0.7,
+                                    annotation_text="Resistance",
+                                    annotation_position="top left",
+                                    annotation_font_size=10,
+                                    annotation_font_color="red"
+                                )
                         
                         fig.update_layout(
                             title=f"{timeframe_name} Analysis - {selected_coin} ({config['period']})",
-                            xaxis_title="Date",
+                            xaxis_title="",
                             yaxis_title="Price (USD)",
                             height=450,
                             showlegend=True,
@@ -2932,19 +2974,47 @@ elif mode == "Elliott Wave Analysis":
                         
                         with col2:
                             if key_levels['support']:
-                                support_price = key_levels['support'][0]['price']
-                                support_distance = ((support_price - current_price) / current_price) * 100
-                                st.metric("Nearest Support", f"${support_price:.0f}", delta=f"{support_distance:+.1f}%")
+                                support_level = key_levels['support'][0]
+                                # Check if this is a zone (enhanced) or single price (fallback)
+                                if support_level.get('is_zone', False):
+                                    # Display as zone range
+                                    zone_low = support_level['zone_low']
+                                    zone_high = support_level['zone_high']
+                                    zone_distance = support_level['distance_pct']
+                                    st.metric(
+                                        "Support Zone", 
+                                        f"${zone_low:.0f} - ${zone_high:.0f}",
+                                        delta=f"{zone_distance:+.1f}% away"
+                                    )
+                                else:
+                                    # Fallback to single price
+                                    support_price = support_level['price']
+                                    support_distance = ((support_price - current_price) / current_price) * 100
+                                    st.metric("Nearest Support", f"${support_price:.0f}", delta=f"{support_distance:+.1f}%")
                             else:
-                                st.metric("Nearest Support", "None detected")
+                                st.metric("Support Zone", "None detected")
                         
                         with col3:
                             if key_levels['resistance']:
-                                resistance_price = key_levels['resistance'][0]['price']
-                                resistance_distance = ((resistance_price - current_price) / current_price) * 100
-                                st.metric("Nearest Resistance", f"${resistance_price:.0f}", delta=f"{resistance_distance:+.1f}%")
+                                resistance_level = key_levels['resistance'][0]
+                                # Check if this is a zone (enhanced) or single price (fallback)
+                                if resistance_level.get('is_zone', False):
+                                    # Display as zone range  
+                                    zone_low = resistance_level['zone_low']
+                                    zone_high = resistance_level['zone_high']
+                                    zone_distance = resistance_level['distance_pct']
+                                    st.metric(
+                                        "Resistance Zone",
+                                        f"${zone_low:.0f} - ${zone_high:.0f}",
+                                        delta=f"{zone_distance:+.1f}% away"
+                                    )
+                                else:
+                                    # Fallback to single price
+                                    resistance_price = resistance_level['price']
+                                    resistance_distance = ((resistance_price - current_price) / current_price) * 100
+                                    st.metric("Nearest Resistance", f"${resistance_price:.0f}", delta=f"{resistance_distance:+.1f}%")
                             else:
-                                st.metric("Nearest Resistance", "None detected")
+                                st.metric("Resistance Zone", "None detected")
                     
                     except Exception as e:
                         st.error(f"Error in {timeframe_name} analysis: {str(e)}")
@@ -3692,10 +3762,13 @@ elif mode == "Market Insights":
         corr_matrix = returns.corr()
         corr_matrix.columns = [col.replace('-USD', '') for col in corr_matrix.columns]
         corr_matrix.index = [idx.replace('-USD', '') for idx in corr_matrix.index]
+        
+        # Reverse the y-axis order for better visualization
+        corr_matrix_reversed = corr_matrix.iloc[::-1]  # Reverse row order
 
         # Enhanced correlation heatmap with better styling
         fig_corr = px.imshow(
-            corr_matrix,
+            corr_matrix_reversed,
             text_auto='.2f',
             aspect="auto",
             title="",
@@ -6504,8 +6577,11 @@ else:  # Portfolio Analysis
         corr_matrix.columns = [col.replace('-USD', '') for col in corr_matrix.columns]
         corr_matrix.index = [idx.replace('-USD', '') for idx in corr_matrix.index]
         
+        # Reverse the y-axis order for better visualization
+        corr_matrix_reversed = corr_matrix.iloc[::-1]  # Reverse row order
+        
         fig_corr = px.imshow(
-            corr_matrix,
+            corr_matrix_reversed,
             text_auto='.2f',
             aspect="auto",
             title="Asset Correlations",
