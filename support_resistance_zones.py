@@ -289,7 +289,18 @@ class SupportResistanceZoneCalculator:
         
         for i, point in enumerate(wave_points[-10:]):  # Last 10 points
             # Calculate local volatility around this point
-            point_idx = self.price_data.index.get_loc(point.date, method='nearest')
+            # Backwards compatible approach for older pandas versions
+            try:
+                # Try new pandas method first
+                point_idx = self.price_data.index.get_loc(point.date, method='nearest')
+            except TypeError:
+                # Fallback for older pandas versions without 'method' parameter
+                try:
+                    point_idx = self.price_data.index.get_loc(point.date)
+                except KeyError:
+                    # If exact date not found, find closest manually
+                    point_idx = self.price_data.index.searchsorted(point.date)
+                    point_idx = min(point_idx, len(self.price_data) - 1)
             local_window = 5
             
             start_idx = max(0, point_idx - local_window)
