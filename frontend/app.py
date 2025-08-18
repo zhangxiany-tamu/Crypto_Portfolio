@@ -42,6 +42,8 @@ from technical_analysis import TechnicalAnalyzer
 import elliott_wave_analyzer
 importlib.reload(elliott_wave_analyzer)
 from elliott_wave_analyzer import ElliottWaveAnalyzer
+# Import real-time labeler
+from elliott_wave_realtime_labeler import ElliottWaveRealtimeLabeler
 
 # Add backend/core to path for ML imports
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'backend', 'core'))
@@ -2794,9 +2796,35 @@ elif mode == "Elliott Wave Analysis":
                         st.caption(f"{config['period']} | {len(timeframe_series)} days | {config['swing_pct']:.1f}% swings")
                         st.caption(f"**{degree_map[timeframe_name]}**")
                         
-                        # Analyze for this timeframe
-                        analyzer = ElliottWaveAnalyzer(timeframe_series, config['swing_pct'])
-                        analysis = analyzer.get_clean_wave_analysis()
+                        # PRIMARY: Real-time Elliott Wave Analysis
+                        realtime_analyzer = ElliottWaveRealtimeLabeler(
+                            timeframe_series, 
+                            min_swing_percentage=config['swing_pct'],
+                            wave_tolerance=0.15,
+                            degree=degree_map[timeframe_name].split()[0]
+                        )
+                        
+                        # Get real-time analysis (this is now PRIMARY)
+                        realtime_analysis = realtime_analyzer.label_current_waves()
+                        trading_signals = realtime_analyzer.get_trading_signals()
+                        
+                        # Create analysis structure from real-time results
+                        if realtime_analysis and realtime_analysis.get('status') == 'Pattern identified':
+                            analysis = {
+                                'wave_count': len(realtime_analysis.get('labeled_waves', [])),
+                                'pattern_type': realtime_analysis.get('scenario', 'Unknown'),
+                                'wave_direction': 'Up' if 'up' in realtime_analysis.get('scenario', '').lower() else 'Down',
+                                'current_position': realtime_analysis.get('current_position', ''),
+                                'pattern_confidence': realtime_analysis.get('confidence', 0),
+                                'key_levels': realtime_analyzer._get_trading_levels(),  # Use zones from real-time analyzer
+                                'wave_labels': [w['label'] for w in realtime_analysis.get('labeled_waves', [])]
+                            }
+                        else:
+                            # Fallback only when real-time completely fails
+                            analyzer = ElliottWaveAnalyzer(timeframe_series, config['swing_pct'])
+                            analysis = analyzer.get_clean_wave_analysis()
+                            # Show warning when using fallback
+                            st.warning("Using simplified analysis - pattern unclear for real-time labeling")
                         
                         # Clean wave analysis summary
                         col1, col2, col3 = st.columns(3)
@@ -2811,8 +2839,24 @@ elif mode == "Elliott Wave Analysis":
                             conf_color = "normal" if confidence > 0.5 else "inverse"
                             st.metric("Confidence", conf_text)
                         
-                        # Current position with better formatting
-                        st.info(f"**Current Wave Position:** {analysis['current_position']}")
+                        # Real-time wave position with confidence warnings
+                        if realtime_analysis and realtime_analysis.get('status') == 'Pattern identified':
+                            confidence = realtime_analysis.get('confidence', 0)
+                            
+                            if confidence < 0.5:
+                                st.warning(f"**Low Confidence ({confidence:.0%}):** {realtime_analysis['current_position']}")
+                                st.caption("**Trading Risk:** Signals may be unreliable due to unclear wave pattern")
+                            else:
+                                st.info(f"**Current Position:** {realtime_analysis['current_position']}")
+                            
+                            # Show alternative counts when confidence is low
+                            if realtime_analysis.get('alternative_counts') and confidence < 0.6:
+                                with st.expander("Alternative Wave Counts", expanded=False):
+                                    st.caption("**Consider these alternatives:**")
+                                    for i, alt in enumerate(realtime_analysis['alternative_counts'][:2], 1):
+                                        st.caption(f"{i}. {alt['scenario']} ({alt['confidence']})")
+                        else:
+                            st.info(f"**Current Wave Position:** {analysis['current_position']}")
                         
                         # Create clean chart focused on timeframe period
                         fig = go.Figure()
@@ -2826,50 +2870,103 @@ elif mode == "Elliott Wave Analysis":
                             line=dict(color='#2E86AB', width=3)
                         ))
                         
-                        # Add wave points
-                        wave_points = analyzer.wave_points[-8:]  # Last 8 points
-                        if len(wave_points) >= 3:
-                            wave_dates = [p.date for p in wave_points]
-                            wave_prices = [p.price for p in wave_points]
-                            wave_types = [p.point_type for p in wave_points]
+                        # Add wave points with REAL-TIME LABELS
+                        if realtime_analysis and realtime_analysis.get('labeled_waves'):
+                            # Use real-time labeled waves
+                            labeled_waves = realtime_analysis['labeled_waves']
+                            wave_dates = [pd.to_datetime(w['date']) for w in labeled_waves]
+                            wave_prices = [w['price'] for w in labeled_waves]
+                            wave_types = [w['type'] for w in labeled_waves]
+                            wave_labels = [w['label'] for w in labeled_waves]
                             
-                            # Add wave markers
+                            # Add wave markers with enhanced styling for real-time
                             fig.add_trace(go.Scatter(
                                 x=wave_dates,
                                 y=wave_prices,
                                 mode='markers+lines',
-                                name='Wave Points',
+                                name='Elliott Waves (Real-Time)',
                                 marker=dict(
-                                    size=10,
-                                    color='red',
-                                    symbol=['triangle-down' if t == 'high' else 'triangle-up' for t in wave_types]
+                                    size=12,
+                                    color=['#ff6b6b' if t == 'high' else '#4ecdc4' for t in wave_types],
+                                    symbol=['triangle-down' if t == 'high' else 'triangle-up' for t in wave_types],
+                                    line=dict(width=2, color='white')
                                 ),
-                                line=dict(color='orange', width=1, dash='dot')
+                                line=dict(color='#f39c12', width=2, dash='dot')
                             ))
                             
-                            # Add wave labels with high contrast visibility
-                            labels = analysis['wave_labels']
-                            for i, (point, label) in enumerate(zip(wave_points, labels)):
-                                if i < len(labels):
-                                    # Alternate label positions to reduce overlap
-                                    y_offset = 25 if point.point_type == 'high' else -35
-                                    
-                                    fig.add_annotation(
-                                        x=point.date,
-                                        y=point.price,
-                                        text=f"<b>{label}</b>",
-                                        showarrow=True,
-                                        arrowhead=2,
-                                        arrowsize=1.5,
-                                        arrowcolor="black",
-                                        ax=0,
-                                        ay=y_offset,
-                                        font=dict(size=16, color="black", family="Arial Black"),
-                                        bgcolor="yellow",
-                                        bordercolor="black",
-                                        borderwidth=2,
-                                        opacity=1.0
-                                    )
+                            # Add enhanced wave labels with anti-overlap positioning
+                            for i, (date, price, wave_type, label) in enumerate(zip(wave_dates, wave_prices, wave_types, wave_labels)):
+                                # Smart positioning to avoid overlap
+                                base_offset = 35 if wave_type == 'high' else -45
+                                
+                                # Alternate positions for consecutive points of same type
+                                if i > 0 and wave_types[i-1] == wave_type:
+                                    # If previous point was same type, offset more to avoid overlap
+                                    if wave_type == 'high':
+                                        y_offset = base_offset + (15 * (i % 3))  # Stagger: 35, 50, 65
+                                    else:
+                                        y_offset = base_offset - (15 * (i % 3))  # Stagger: -45, -60, -75
+                                else:
+                                    y_offset = base_offset
+                                
+                                fig.add_annotation(
+                                    x=date,
+                                    y=price,
+                                    text=f"<b>{label}</b>",
+                                    showarrow=True,
+                                    arrowhead=2,
+                                    arrowsize=1.5,
+                                    arrowcolor="black",
+                                    ax=0,
+                                    ay=y_offset,
+                                    font=dict(size=12, color="black", family="Arial"),
+                                    bgcolor="yellow",
+                                    bordercolor="black",
+                                    borderwidth=1,
+                                    opacity=1.0
+                                )
+                        else:
+                            # Fallback to traditional wave points if real-time analysis unavailable
+                            wave_points = analyzer.wave_points[-8:]  # Last 8 points
+                            if len(wave_points) >= 3:
+                                wave_dates = [p.date for p in wave_points]
+                                wave_prices = [p.price for p in wave_points]
+                                wave_types = [p.point_type for p in wave_points]
+                                
+                                # Add traditional wave markers
+                                fig.add_trace(go.Scatter(
+                                    x=wave_dates,
+                                    y=wave_prices,
+                                    mode='markers+lines',
+                                    name='Wave Points',
+                                    marker=dict(
+                                        size=10,
+                                        color='red',
+                                        symbol=['triangle-down' if t == 'high' else 'triangle-up' for t in wave_types]
+                                    ),
+                                    line=dict(color='orange', width=1, dash='dot')
+                                ))
+                                
+                                # Add traditional labels
+                                labels = analysis['wave_labels']
+                                for i, (point, label) in enumerate(zip(wave_points, labels)):
+                                    if i < len(labels):
+                                        y_offset = 25 if point.point_type == 'high' else -35
+                                        fig.add_annotation(
+                                            x=point.date,
+                                            y=point.price,
+                                            text=f"<b>{label}</b>",
+                                            showarrow=True,
+                                            arrowhead=2,
+                                            arrowsize=1.5,
+                                            arrowcolor="black",
+                                            ax=0,
+                                            ay=y_offset,
+                                            font=dict(size=12, color="black"),
+                                            bgcolor="yellow",
+                                            bordercolor="black",
+                                            borderwidth=1
+                                        )
                         
                         # Add clean support/resistance levels (timeframe-specific)
                         key_levels = analysis['key_levels']
@@ -2964,6 +3061,32 @@ elif mode == "Elliott Wave Analysis":
                         )
                         
                         st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Confidence-based trading signals with risk warnings
+                        if realtime_analysis and realtime_analysis.get('status') == 'Pattern identified':
+                            signal = trading_signals.get('signal', 'NEUTRAL')
+                            signal_reason = trading_signals.get('reason', 'No clear signal')
+                            confidence = realtime_analysis.get('confidence', 0)
+                            
+                            # Simple trading signal with confidence warning
+                            reliability_warning = ""
+                            if confidence < 0.4:
+                                reliability_warning = " (Very Low Confidence)"
+                            elif confidence < 0.6:
+                                reliability_warning = " (Low Confidence)"
+                            
+                            if 'BUY' in signal:
+                                st.success(f"**Trading Signal: {signal}** - {signal_reason}{reliability_warning}")
+                            elif 'SELL' in signal:
+                                st.error(f"**Trading Signal: {signal}** - {signal_reason}{reliability_warning}")
+                            else:
+                                st.info(f"**Trading Signal: {signal}** - {signal_reason}")
+                            
+                            # Simple prediction
+                            if realtime_analysis.get('prediction'):
+                                pred = realtime_analysis['prediction']
+                                target_avg = (pred.target_range[0] + pred.target_range[1]) / 2
+                                st.caption(f"**Next Expected**: {pred.next_wave} - Target: ${target_avg:.0f}")
                         
                         # Key levels summary
                         st.subheader("Key Trading Levels")

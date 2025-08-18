@@ -1,87 +1,55 @@
-# Crypto Portfolio Optimizer
+# Crypto Analysis Platform
 
-A cryptocurrency portfolio analysis and optimization tool with technical analysis and machine learning predictions.
+A comprehensive cryptocurrency analysis tool with portfolio optimization and real-time Elliott Wave analysis.
 
 ## Features
 
-- **Market Insights**: Price analysis, correlation matrices, and crypto news sources
-- **Technical Analysis**: Comprehensive indicators including RSI, MACD, Bollinger Bands, and momentum signals
-- **Portfolio Analysis**: Backtesting with customizable weights and rebalancing strategies
-- **Portfolio Optimization**: Maximum Sharpe Ratio, Minimum Variance, and Risk Parity algorithms
-- **Machine Learning Predictions**: Multiple ML models with ensemble predictions and auto-optimized training windows
-- **AI Investment Advisor**: Integration with OpenAI GPT-4, Anthropic Claude, and Google Gemini
+- **Market Insights**: Price analysis and correlation matrices
+- **Technical Analysis**: RSI, MACD, Bollinger Bands, and momentum indicators
+- **Elliott Wave Analysis**: Real-time wave labeling with trading signals
+- **Portfolio Optimization**: Sharpe ratio and risk parity strategies
+- **Machine Learning**: Multi-model predictions with ensemble forecasting
+- **AI Advisor**: Integration with GPT-4, Claude, and Gemini
 
 ## Quick Start
-
-### Live Demo
-
-**[Live application](https://zhangxianyang-crypto-portfolio.share.connect.posit.cloud/)**
-
-### Local Installation
 
 ```bash
 git clone https://github.com/zhangxiany-tamu/Crypto_Portfolio.git
 cd Crypto_Portfolio
-python -m pip install -r requirements.txt
+pip install -r requirements.txt
+streamlit run frontend/app.py
 ```
 
-### Run Locally
+Open browser to `http://localhost:8501`
 
-```bash
-cd frontend
-streamlit run app.py
-```
+## Core Modules
 
-Open your browser to `http://localhost:8501`
+### Elliott Wave Analysis
+Real-time wave position identification and trading signal generation with confidence scoring.
 
-## Usage
+### Portfolio Optimization  
+Maximum Sharpe Ratio, Minimum Variance, and Risk Parity optimization with backtesting.
 
-### 1. Market Insights
-- Price performance charts with correlation analysis
-- Crypto news from major financial outlets
-- Individual asset analysis with risk metrics
-- Price and returns distributions
+### Technical Analysis
+20+ indicators with automated consensus signals and support/resistance zones.
 
-### 2. Technical Analysis
-- Trend indicators: Moving averages, MACD, support/resistance levels
-- Momentum oscillators: RSI, Stochastic, Williams %R
-- Volatility measures: Bollinger Bands, ATR
-- Additional indicators: CCI, ROC, momentum signals
-
-### 3. Portfolio Analysis & Backtest
-- Define portfolio weights with backtesting
-- Performance metrics and risk-adjusted returns
-- Rebalancing strategies and drawdown analysis
-
-### 4. Portfolio Optimization
-- Maximum Sharpe Ratio, Minimum Variance, Risk Parity strategies
-- Weight constraints for diversification
-- Seamless integration with other analysis modes
-
-### 5. Machine Learning Predictions
-- Auto-optimized training windows for 7-day forecasts
-- Multiple ML models with ensemble predictions
-- Portfolio-level predictions and confidence analysis
-
-### 6. AI Investment Advisor
-- Investment recommendations from multiple AI models
-- Market analysis and portfolio positioning advice
-- OpenAI GPT-4, Anthropic Claude, Google Gemini integration
+### Machine Learning
+Random Forest, XGBoost, and ensemble models with auto-optimized training windows.
 
 ## Supported Assets
 
-60+ cryptocurrencies with 5+ years of historical data including BTC, ETH, XRP, BNB, SOL, DOGE, ADA, MATIC, DOT, UNI, AAVE, LINK, AVAX, NEAR, ATOM, and more.
+60+ cryptocurrencies including BTC, ETH, XRP, BNB, SOL, DOGE, ADA, MATIC, DOT, UNI, AAVE, LINK, AVAX, NEAR, ATOM.
 
-## Setup
+## Configuration
 
-For AI features, configure API keys from:
+For AI features, add API keys:
 - OpenAI: https://platform.openai.com/api-keys
 - Anthropic: https://console.anthropic.com/
 - Google: https://ai.google.dev/
 
 ## Disclaimer
 
-For educational and research purposes only. Not financial advice. Cryptocurrency investments are highly risky.
+Educational use only. Not financial advice. Cryptocurrency investments carry high risk.
 
 ## License
 

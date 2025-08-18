@@ -48,9 +48,42 @@ Thumbs.db
 # Logs
 *.log
 
-# Deployment files
-Dockerfile
-docker-compose.yml
-*.yaml
-deploy*.sh
+# Only ignore clearly unnecessary files
+debug_rss_parsing.py
+debug_app_flow.py
+patch_elliott_wave.py
+sample_enhanced_analysis.txt
+
+# Development documentation (internal notes only)
+*_FIX.md
+*_IMPROVEMENTS.md  
+*_ENHANCEMENT.md
+
+# Test files that aren't in tests/ folder
+test_enhanced_analyzer.py
+test_realtime_wave_labeling.py
+test_sr_improvements.py
+test_sr_zones.py
+
+# Large data directories (but keep small .db files)
+data/crypto_extended.db
+
+# Streamlit
+.streamlit/
+
+# Environment files
+.env
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Keep Dockerfiles (remove this ignore)
+# Dockerfile and docker-compose.yml should be in repo
 .gcloudignore
