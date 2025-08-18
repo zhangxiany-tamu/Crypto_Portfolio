@@ -2,6 +2,8 @@
 
 A comprehensive cryptocurrency analysis tool with portfolio optimization and real-time Elliott Wave analysis.
 
+**Live App:** https://zhangxianyang-crypto-portfolio.share.connect.posit.cloud/
+
 ## Features
 
 - **Market Insights**: Price analysis and correlation matrices
