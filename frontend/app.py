@@ -1650,7 +1650,7 @@ if mode == "Market Insights":
     )
     # Make plot transparent for better integration
     fig = make_plot_transparent(fig)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     
     # Market Correlation Matrix
     st.subheader("Asset Correlation Matrix")
@@ -1696,7 +1696,7 @@ if mode == "Market Insights":
         
         # Make plot transparent for better integration
         fig_corr = make_plot_transparent(fig_corr)
-        st.plotly_chart(fig_corr, use_container_width=True)
+        st.plotly_chart(fig_corr, width="stretch")
     else:
         st.info("Correlation analysis requires at least 2 assets. Please select more cryptocurrencies in the sidebar.")
         
@@ -1925,7 +1925,7 @@ if mode == "Market Insights":
                         range=[0, 1]
                     )
                 )
-                st.plotly_chart(fig_hist, use_container_width=True)
+                st.plotly_chart(fig_hist, width="stretch")
                 
                 # Violin plot for price distribution
                 fig_violin = go.Figure()
@@ -1943,7 +1943,7 @@ if mode == "Market Insights":
                     height=300,
                     showlegend=False
                 )
-                st.plotly_chart(fig_violin, use_container_width=True)
+                st.plotly_chart(fig_violin, width="stretch")
         
         with tab2:
             # Returns distribution analysis
@@ -2067,7 +2067,7 @@ if mode == "Market Insights":
                         range=[0, 1]
                     )
                 )
-                st.plotly_chart(fig_returns, use_container_width=True)
+                st.plotly_chart(fig_returns, width="stretch")
                 
                 # Violin plot for returns distribution
                 fig_violin_returns = go.Figure()
@@ -2085,7 +2085,7 @@ if mode == "Market Insights":
                     height=300,
                     showlegend=False
                 )
-                st.plotly_chart(fig_violin_returns, use_container_width=True)
+                st.plotly_chart(fig_violin_returns, width="stretch")
 
 elif mode == "Technical Analysis":
     st.header("Technical Analysis")
@@ -2190,7 +2190,7 @@ elif mode == "Technical Analysis":
                             height=250,
                             showlegend=False
                         )
-                        st.plotly_chart(fig_consensus, use_container_width=True)
+                        st.plotly_chart(fig_consensus, width="stretch")
                     
                     with consensus_col2:
                         st.markdown("**Interpretation Guide:**")
@@ -2378,7 +2378,7 @@ elif mode == "Technical Analysis":
                     yaxis_title="Price (USD)",
                     height=500
                 )
-                st.plotly_chart(fig_trend, use_container_width=True)
+                st.plotly_chart(fig_trend, width="stretch")
                 
                 # MACD
                 if all(k in indicators for k in ['macd_line', 'macd_signal', 'macd_histogram']):
@@ -2416,7 +2416,7 @@ elif mode == "Technical Analysis":
                         yaxis_title="MACD",
                         height=400
                     )
-                    st.plotly_chart(fig_macd, use_container_width=True)
+                    st.plotly_chart(fig_macd, width="stretch")
             
             with tab2:
                 # RSI
@@ -2441,7 +2441,7 @@ elif mode == "Technical Analysis":
                         height=400,
                         yaxis=dict(range=[0, 100])
                     )
-                    st.plotly_chart(fig_rsi, use_container_width=True)
+                    st.plotly_chart(fig_rsi, width="stretch")
                 
                 # Stochastic Oscillator
                 if all(k in indicators for k in ['stoch_k', 'stoch_d']):
@@ -2473,7 +2473,7 @@ elif mode == "Technical Analysis":
                         height=400,
                         yaxis=dict(range=[0, 100])
                     )
-                    st.plotly_chart(fig_stoch, use_container_width=True)
+                    st.plotly_chart(fig_stoch, width="stretch")
                 
                 # Williams %R
                 if 'williams_r' in indicators:
@@ -2496,7 +2496,7 @@ elif mode == "Technical Analysis":
                         height=400,
                         yaxis=dict(range=[-100, 0])
                     )
-                    st.plotly_chart(fig_williams, use_container_width=True)
+                    st.plotly_chart(fig_williams, width="stretch")
             
             with tab3:
                 # Bollinger Bands
@@ -2548,7 +2548,7 @@ elif mode == "Technical Analysis":
                         yaxis_title="Price (USD)",
                         height=500
                     )
-                    st.plotly_chart(fig_bb, use_container_width=True)
+                    st.plotly_chart(fig_bb, width="stretch")
                 
                 # ATR (Average True Range)
                 if 'atr' in indicators:
@@ -2567,7 +2567,7 @@ elif mode == "Technical Analysis":
                         yaxis_title="ATR",
                         height=400
                     )
-                    st.plotly_chart(fig_atr, use_container_width=True)
+                    st.plotly_chart(fig_atr, width="stretch")
             
             with tab4:
                 # Additional Indicators
@@ -2594,7 +2594,7 @@ elif mode == "Technical Analysis":
                         yaxis_title="CCI",
                         height=400
                     )
-                    st.plotly_chart(fig_cci, use_container_width=True)
+                    st.plotly_chart(fig_cci, width="stretch")
                 
                 # Rate of Change (ROC)
                 if 'roc_10' in indicators and 'roc_20' in indicators:
@@ -2624,7 +2624,7 @@ elif mode == "Technical Analysis":
                         yaxis_title="ROC (%)",
                         height=400
                     )
-                    st.plotly_chart(fig_roc, use_container_width=True)
+                    st.plotly_chart(fig_roc, width="stretch")
                 
                 # Momentum indicators
                 if 'momentum_10' in indicators and 'momentum_20' in indicators:
@@ -2654,7 +2654,7 @@ elif mode == "Technical Analysis":
                         yaxis_title="Momentum (%)",
                         height=400
                     )
-                    st.plotly_chart(fig_momentum, use_container_width=True)
+                    st.plotly_chart(fig_momentum, width="stretch")
             
             # Key levels are already displayed on the price charts in Trend Analysis tab
             
@@ -3060,7 +3060,7 @@ elif mode == "Elliott Wave Analysis":
                             template="plotly_white"
                         )
                         
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, width="stretch")
                         
                         # Confidence-based trading signals with risk warnings
                         if realtime_analysis and realtime_analysis.get('status') == 'Pattern identified':
@@ -3309,7 +3309,7 @@ elif mode == "Portfolio Analysis & Backtest":
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)'
     )
-    st.plotly_chart(fig_pie, use_container_width=True)
+    st.plotly_chart(fig_pie, width="stretch")
     
     # Portfolio backtest simulation
     st.subheader("Realistic Backtest Simulation")
@@ -3366,7 +3366,7 @@ elif mode == "Portfolio Analysis & Backtest":
                     })
             
             availability_df = pd.DataFrame(availability_data)
-            st.dataframe(availability_df, use_container_width=True, hide_index=True)
+            st.dataframe(availability_df, width="stretch", hide_index=True)
     
     # Backtest parameters
     col1, col2, col3 = st.columns(3)
@@ -3597,7 +3597,7 @@ elif mode == "Portfolio Analysis & Backtest":
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)'
     )
-    st.plotly_chart(backtest_fig, use_container_width=True)
+    st.plotly_chart(backtest_fig, width="stretch")
         
     # Rebalancing info
     num_rebalances = len([cost for cost in rebalance_costs if cost > 0]) - 1  # Exclude initial cost
@@ -3637,7 +3637,7 @@ elif mode == "Portfolio Analysis & Backtest":
         template='plotly_dark' if st.session_state.theme == 'dark' else 'plotly_white'
     )
     
-    st.plotly_chart(fig_dd, use_container_width=True)
+    st.plotly_chart(fig_dd, width="stretch")
 
 elif mode == "Portfolio Optimization":
     st.header("Advanced Portfolio Optimization")
@@ -3808,7 +3808,7 @@ elif mode == "Portfolio Optimization":
                 plot_bgcolor='rgba(0,0,0,0)',
                 paper_bgcolor='rgba(0,0,0,0)'
             )
-            st.plotly_chart(fig_pie, use_container_width=True)
+            st.plotly_chart(fig_pie, width="stretch")
             
             # Set optimized weights as the active portfolio weights
             st.session_state.portfolio_weights = result['weights']
@@ -3874,7 +3874,7 @@ elif mode == "Market Insights":
     
     fig_scatter.update_traces(textposition="top center")
     fig_scatter.update_layout(height=500)
-    st.plotly_chart(fig_scatter, use_container_width=True, hide_index=True)
+    st.plotly_chart(fig_scatter, width="stretch")
     
     # Enhanced Correlation Analysis
     st.subheader("Asset Correlation Matrix")
@@ -3914,7 +3914,7 @@ elif mode == "Market Insights":
                 dtick=0.5
             )
         )
-        st.plotly_chart(fig_corr, use_container_width=True)
+        st.plotly_chart(fig_corr, width="stretch")
     
     with col2:
         st.markdown("**Correlation Insights**")
@@ -3990,7 +3990,7 @@ elif mode == "Market Insights":
                 template='plotly_dark' if st.session_state.theme == 'dark' else 'plotly_white'
             )
             
-            st.plotly_chart(fig_rolling, use_container_width=True, hide_index=True)
+            st.plotly_chart(fig_rolling, width="stretch")
         
         with col2:
             fig_vol = go.Figure()
@@ -4010,7 +4010,7 @@ elif mode == "Market Insights":
                 template='plotly_dark' if st.session_state.theme == 'dark' else 'plotly_white'
             )
             
-            st.plotly_chart(fig_vol, use_container_width=True, hide_index=True)
+            st.plotly_chart(fig_vol, width="stretch")
     
     # Market summary statistics
     st.subheader("Market Summary Statistics")
@@ -4031,7 +4031,7 @@ elif mode == "Market Insights":
         })
     
     summary_df = pd.DataFrame(summary_stats)
-    st.dataframe(summary_df, use_container_width=True, hide_index=True)
+    st.dataframe(summary_df, width="stretch", hide_index=True)
 
 elif mode == "ML Predictions":
     st.header("Machine Learning Predictions")
@@ -4632,7 +4632,7 @@ elif mode == "ML Predictions":
             })
         
         if data_summary:
-            st.dataframe(pd.DataFrame(data_summary), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(data_summary), width="stretch", hide_index=True)
     
     # Progress bar for model training
     progress_bar = st.progress(0)
@@ -4796,7 +4796,7 @@ elif mode == "ML Predictions":
                 paper_bgcolor='rgba(0,0,0,0)',
                 margin=dict(t=80, b=60, l=60, r=40)
             )
-            st.plotly_chart(fig_bar, use_container_width=True)
+            st.plotly_chart(fig_bar, width="stretch")
         
         with col2:
             # Model agreement analysis
@@ -4852,7 +4852,7 @@ elif mode == "ML Predictions":
                     margin=dict(t=40, b=40, l=60, r=20)  # Adjusted margins for better text display
                 )
                 
-                st.plotly_chart(fig_agreement, use_container_width=True)
+                st.plotly_chart(fig_agreement, width="stretch")
         
         # Detailed predictions table
         st.subheader("Detailed Predictions Summary")
@@ -4897,7 +4897,7 @@ elif mode == "ML Predictions":
         
         if table_data:
             summary_df = pd.DataFrame(table_data)
-            st.dataframe(summary_df, use_container_width=True, hide_index=True)
+            st.dataframe(summary_df, width="stretch", hide_index=True)
     
     # Portfolio-level predictions
     if prediction_results:
@@ -5009,7 +5009,7 @@ elif mode == "ML Predictions":
             height=400
         )
         
-        st.plotly_chart(fig_pred, use_container_width=True)
+        st.plotly_chart(fig_pred, width="stretch")
         
         # Enhanced Asset Analysis
         st.subheader("Asset Analysis Dashboard")
@@ -5084,7 +5084,7 @@ elif mode == "ML Predictions":
                     yaxis_tickformat='.1%'
                 )
                 
-                st.plotly_chart(fig_bubble, use_container_width=True)
+                st.plotly_chart(fig_bubble, width="stretch")
             
             with col2:
                 # Risk-Return prediction quadrant
@@ -5141,7 +5141,7 @@ elif mode == "ML Predictions":
                     showlegend=False
                 )
                 
-                st.plotly_chart(fig_risk_return, use_container_width=True)
+                st.plotly_chart(fig_risk_return, width="stretch")
             
             # Portfolio impact summary table
             st.subheader("Portfolio Impact Analysis")
@@ -5159,7 +5159,7 @@ elif mode == "ML Predictions":
             impact_df['Sort_Key'] = comparison_df['Weighted_Impact'].abs()
             impact_df = impact_df.sort_values('Sort_Key', ascending=False).drop('Sort_Key', axis=1)
             
-            st.dataframe(impact_df, use_container_width=True, hide_index=True)
+            st.dataframe(impact_df, width="stretch", hide_index=True)
     
     # Disclaimer
     st.subheader("Important Disclaimer")
@@ -5395,7 +5395,7 @@ elif mode == "AI Investment Advisor":
             'Asset': list(current_portfolio_weights.keys()),
             'Current %': [f"{w:.1f}%" for w in current_portfolio_weights.values()]
         })
-        st.dataframe(current_df, use_container_width=True, hide_index=True)
+        st.dataframe(current_df, width="stretch", hide_index=True)
     
     # Get cached data
     price_data, returns = get_cached_data(
@@ -5902,7 +5902,7 @@ elif mode == "AI Investment Advisor":
                                     )
                                     fig_current.update_traces(textposition='inside', textinfo='percent+label')
                                     fig_current.update_layout(height=350, template='plotly_white')
-                                    st.plotly_chart(fig_current, use_container_width=True)
+                                    st.plotly_chart(fig_current, width="stretch")
                             
                             with col2:
                                 st.subheader("AI Recommended Portfolio")
@@ -5919,7 +5919,7 @@ elif mode == "AI Investment Advisor":
                                     )
                                     fig_recommended.update_traces(textposition='inside', textinfo='percent+label')
                                     fig_recommended.update_layout(height=350, template='plotly_white')
-                                    st.plotly_chart(fig_recommended, use_container_width=True)
+                                    st.plotly_chart(fig_recommended, width="stretch")
                             
                             # 2. Rebalancing Plan
                             st.subheader("Precise Rebalancing Plan")
@@ -6087,7 +6087,7 @@ elif mode == "AI Investment Advisor":
                 
                 if context_df_data:
                     context_df = pd.DataFrame(context_df_data)
-                    st.dataframe(context_df, use_container_width=True, hide_index=True)
+                    st.dataframe(context_df, width="stretch", hide_index=True)
             
             # Show the data weight guidance
             st.write("**2. AI Guidance Based on Investment Horizon**")
@@ -6103,13 +6103,13 @@ elif mode == "AI Investment Advisor":
             with col1:
                 st.write("**3. Market Performance Data (Full Period)**")
                 market_source_df = pd.DataFrame(analysis_data["market_data"]).T
-                st.dataframe(market_source_df, use_container_width=True, hide_index=True)
+                st.dataframe(market_source_df, width="stretch", hide_index=True)
             
             with col2:
                 st.write(f"**4. ML Predictions ({prediction_days}-day forecasts)**")
                 if analysis_data["ml_predictions"]:
                     tech_source_df = pd.DataFrame(analysis_data["ml_predictions"]).T
-                    st.dataframe(tech_source_df, use_container_width=True, hide_index=True)
+                    st.dataframe(tech_source_df, width="stretch", hide_index=True)
                 else:
                     st.write("No ML prediction data available")
             
@@ -6127,7 +6127,7 @@ elif mode == "AI Investment Advisor":
                 
                 if opt_df_data:
                     opt_df = pd.DataFrame(opt_df_data)
-                    st.dataframe(opt_df, use_container_width=True, hide_index=True)
+                    st.dataframe(opt_df, width="stretch", hide_index=True)
             
             if analysis_data.get("correlation_analysis"):
                 st.write("**6. Correlation Analysis**")
@@ -6239,7 +6239,7 @@ elif mode == "AI Investment Advisor":
         })
     
     market_df = pd.DataFrame(market_data)
-    st.dataframe(market_df, use_container_width=True, hide_index=True)
+    st.dataframe(market_df, width="stretch", hide_index=True)
     
     # Important disclaimers
     st.subheader("Important Disclaimers")
@@ -6528,7 +6528,7 @@ else:  # Portfolio Analysis
             
             if launch_data:
                 launch_df = pd.DataFrame(launch_data)
-                st.dataframe(launch_df, hide_index=True, use_container_width=True)
+                st.dataframe(launch_df, hide_index=True, width="stretch")
                 
                 # Add explanatory note
                 st.caption("**Note**: For pre-existing coins, we only know they launched before the analysis start date, not their actual launch date.")
@@ -6556,7 +6556,7 @@ else:  # Portfolio Analysis
                     })
                 
                 weight_df = pd.DataFrame(weight_evolution)
-                st.dataframe(weight_df, hide_index=True, use_container_width=True)
+                st.dataframe(weight_df, hide_index=True, width="stretch")
         
         # Show dynamic weights over time
         if len(dynamic_weights_history) > 1:
@@ -6584,7 +6584,7 @@ else:  # Portfolio Analysis
                 template='plotly_dark' if st.session_state.theme == 'dark' else 'plotly_white'
             )
             
-            st.plotly_chart(fig_coins, use_container_width=True)
+            st.plotly_chart(fig_coins, width="stretch")
             
             # Explanation
             total_coins = len(selected_symbols)
@@ -6667,7 +6667,7 @@ else:  # Portfolio Analysis
         template='plotly_dark' if st.session_state.theme == 'dark' else 'plotly_white'
     )
     
-    st.plotly_chart(fig, use_container_width=True, hide_index=True)
+    st.plotly_chart(fig, width="stretch")
     
     # Add explanation based on mode
     if price_view_mode == "Normalized":
@@ -6692,7 +6692,7 @@ else:  # Portfolio Analysis
         )
         fig_violin.update_layout(height=350)
         fig_violin.update_traces(opacity=0.6, points='outliers')
-        st.plotly_chart(fig_violin, use_container_width=True, hide_index=True)
+        st.plotly_chart(fig_violin, width="stretch")
     
     with col2:
         # Enhanced correlation heatmap
@@ -6727,7 +6727,7 @@ else:  # Portfolio Analysis
                 dtick=0.5
             )
         )
-        st.plotly_chart(fig_corr, use_container_width=True)
+        st.plotly_chart(fig_corr, width="stretch")
     
     # Statistics table
     st.subheader("Statistical Summary")
@@ -6748,7 +6748,7 @@ else:  # Portfolio Analysis
         })
     
     stats_df = pd.DataFrame(stats_data)
-    st.dataframe(stats_df, use_container_width=True, hide_index=True)
+    st.dataframe(stats_df, width="stretch", hide_index=True)
 
 # Footer
 st.markdown("---")

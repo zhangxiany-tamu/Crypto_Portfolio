@@ -69,7 +69,7 @@ class DataManager:
                 if symbol in cached_data:
                     combined_data[symbol] = cached_data[symbol]['close']
             
-            return combined_data.fillna(method='ffill').dropna()
+            return combined_data.ffill().dropna()
             
         except Exception as e:
             raise Exception(f"Error fetching price data: {str(e)}")

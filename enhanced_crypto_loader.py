@@ -136,7 +136,7 @@ class EnhancedCryptoLoader:
                     price_data[symbol] = np.nan
             
             # Reorder columns to match input order and forward fill
-            price_data = price_data[available_symbols].fillna(method='ffill')
+            price_data = price_data[available_symbols].ffill()
             
             load_time = (datetime.now() - start_time).total_seconds()
             print(f"✅ Loaded {price_data.shape[0]} days × {price_data.shape[1]} symbols in {load_time:.3f}s")
@@ -368,7 +368,7 @@ class EnhancedCryptoLoader:
                 
                 # Combine and sort
                 combined_data = pd.concat([local_data, api_data]).sort_index()
-                combined_data = combined_data[all_symbols].fillna(method='ffill')
+                combined_data = combined_data[all_symbols].ffill()
                 
                 print(f"✅ Hybrid data ready: {combined_data.shape[0]} days × {combined_data.shape[1]} symbols")
                 return combined_data
